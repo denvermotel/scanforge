@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>ScanForge - autotest del banco</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 24px; color: #222; }
+  table { border-collapse: collapse; margin-top: 12px; }
+  td, th { border: 1px solid #ccc; padding: 4px 10px; text-align: left; }
+  .pass { color: #0a7a2f; }
+  .fail { color: #b00020; font-weight: 600; }
+  #summary { font-weight: 600; }
+</style>
+</head>
+<body>
+<h1>Autotest del banco</h1>
+<p id="summary">In corso...</p>
+<table id="results"><thead><tr><th>Controllo</th><th>Esito</th><th>Dettaglio</th></tr></thead><tbody></tbody></table>
+<script src="reference/ref02.js"></script>
+<script src="lib/synth.js"></script>
+<script>
+(function () {
+  var rows = [];
+  var failures = [];
+
+  // Un controllo e' verde se fn (anche asincrona) restituisce true.
+  async function check(name, fn) {
+    var ok = false, detail = '';
+    try {
+      var r = await fn();
+      ok = r === true;
+      if (!ok) detail = String(r);
+    } catch (e) {
+      detail = String(e && e.message || e);
+    }
+    rows.push({ name: name, ok: ok, detail: detail });
+    if (!ok) failures.push(name + (detail ? ' - ' + detail : ''));
+  }
+
+  async function run() {
+    var A = Synth.make(Synth.cases['A-ombra']);
+
+    await check('Synth e deterministico (A-ombra due volte, stesso dataUrl)', function () {
+      var A2 = Synth.make(Synth.cases['A-ombra']);
+      return A.dataUrl === A2.dataUrl ? true : 'dataUrl diversi';
+    });
+
+    await check('Synth: i quattro casi hanno le dimensioni dichiarate', function () {
+      var exp = { 'A-ombra': [800, 600], 'B-scuro': [800, 600], 'C-piccola': [25, 19], 'D-wa': [1600, 1200] };
+      for (var k in exp) {
+        var s = Synth.make(Synth.cases[k]);
+        if (s.canvas.width !== exp[k][0] || s.canvas.height !== exp[k][1]) return k + ' ' + s.canvas.width + 'x' + s.canvas.height;
+      }
+      return true;
+    });
+
+    await check('Ref02.detect(A) risolve un oggetto con tl,tr,br,bl', async function () {
+      var c = await Ref02.detect(A.dataUrl);
+      if (!c || typeof c !== 'object') return 'risultato ' + c;
+      var miss = ['tl', 'tr', 'br', 'bl'].filter(function (k) { return !(k in c); });
+      return miss.length ? 'mancano ' + miss.join(',') : true;
+    });
+
+    await check('Ref02.process(A, angoli veri) restituisce un canvas > 10x10', async function () {
+      var cv = await Ref02.process({
+        originalSrc: A.dataUrl,
+        corners: A.corners,
+        settings: Object.assign({}, Ref02.defaultSettings(), { perspective: true })
+      });
+      if (!cv || !cv.width) return 'non è un canvas';
+      return (cv.width > 10 && cv.height > 10) ? true : cv.width + 'x' + cv.height;
+    });
+
+    render();
+  }
+
+  function render() {
+    var pass = rows.filter(function (r) { return r.ok; }).length;
+    var fail = rows.length - pass;
+    var tbody = document.querySelector('#results tbody');
+    rows.forEach(function (r) {
+      var tr = document.createElement('tr');
+      [r.name, r.ok ? 'OK' : 'KO', r.detail].forEach(function (txt, i) {
+        var td = document.createElement('td');
+        td.textContent = txt;
+        if (i === 1) td.className = r.ok ? 'pass' : 'fail';
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    document.getElementById('summary').textContent = 'Passati: ' + pass + ' - Falliti: ' + fail;
+    window.__self = { summary: { pass: pass, fail: fail }, failures: failures };
+    var fine = document.createElement('p');
+    fine.textContent = 'FINE';
+    document.body.appendChild(fine);
+  }
+
+  run();
+})();
+</script>
+</body>
+</html>

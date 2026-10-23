@@ -1,0 +1,967 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ScanForge - annotatore degli angoli</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 24px; color: #222; background: #fff; }
+  h1 { margin-top: 0; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; margin-bottom: 12px; }
+  label { display: flex; flex-direction: column; font-size: 13px; gap: 4px; }
+  label.inline { flex-direction: row; align-items: center; gap: 6px; }
+  button, select, input { font: inherit; padding: 4px 8px; }
+  #stage { position: relative; display: inline-block; max-width: 100%; }
+  canvas { display: block; max-width: 100%; border: 1px solid #ccc; background: #f4f4f4; cursor: crosshair; touch-action: none; }
+  #status { min-height: 1.5em; font-weight: 600; }
+  .ok { color: #0a7a2f; }
+  .err { color: #b00020; }
+  .hint { color: #555; font-size: 13px; max-width: 70ch; }
+  #guida { min-height: 1.5em; font-size: 22px; font-weight: 700; color: #1a237e; margin: 10px 0; max-width: 60ch; line-height: 1.3; }
+  #istruzioni { background: #f6f6f6; border: 1px solid #ddd; padding: 8px 14px; max-width: 78ch; margin-bottom: 12px; }
+  #istruzioni[hidden] { display: none; }
+  #conta { font-weight: 600; min-width: 14ch; }
+  #rot { font-weight: 600; min-width: 11ch; }
+  code { background: #f0f0f0; padding: 0 4px; }
+  kbd { background: #f0f0f0; border: 1px solid #ccc; border-radius: 3px; padding: 0 4px; font: inherit; font-size: 12px; }
+  .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; border: 1px solid #000; vertical-align: baseline; }
+  .dot.y { background: #ffeb3b; }
+  #avviso { background: #ffe0b2; border: 1px solid #e65100; color: #4e2600; padding: 6px 10px; max-width: 70ch; font-weight: 600; }
+  #avviso[hidden] { display: none; }
+  #riquadri { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+  .box { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 4px 8px; border: 1px solid #ddd; border-left: 8px solid #999; background: #fafafa; }
+  .box.active { background: #fff8d6; border-color: #999; box-shadow: 0 0 0 2px #333 inset; }
+  .box .cnt { font-size: 13px; color: #555; min-width: 9ch; }
+  .box label { flex-direction: row; align-items: center; gap: 6px; }
+  /* Riquadro del rilevatore: fuori dallo schermo, mai visibile. */
+  #rilevatore { position: absolute; left: -9999px; top: 0; width: 800px; height: 600px; border: 0; }
+</style>
+</head>
+<body>
+<h1>Annotatore degli angoli</h1>
+<p class="hint">Per ogni foto clicca i punti uno alla volta, come dice la frase sopra l'immagine: i punti sono numerati e
+puoi trascinarli. <kbd>Invio</kbd> conferma e passa alla foto dopo, <kbd>&larr;</kbd> e <kbd>&rarr;</kbd> ti spostano senza
+salvare. Le foto stanno in <code>dev/materiale/banco/foto/</code>; il salvataggio scrive solo <code>ground-truth.json</code>.
+<button type="button" id="comeSiUsa" aria-expanded="false" aria-controls="istruzioni">Come si usa</button></p>
+<div id="istruzioni" class="hint" hidden>
+  <p>Lo strumento non carica nulla su servizi esterni, ma la cartella <code>dev/materiale</code> potrebbe essere
+  sincronizzata dal client OneDrive: se usi foto vere, escludi <code>dev/materiale/banco/foto</code> dalla sincronizzazione.</p>
+  <p>Per ogni foto non ancora annotata i punti iniziali sono quelli proposti dal rilevatore di ScanForge
+  (<span class="dot y"></span> gialli): trascina quelli sbagliati, poi conferma. Con il passaporto aperto la procedura è
+  guidata: i quattro angoli (cerchi rossi) e i due estremi della piega (quadrati blu), un clic alla volta; l'anello che
+  pulsa è la posizione proposta dal rilevatore, e un clic dentro l'anello la accetta. La piega può essere in qualsiasi
+  direzione, anche orizzontale. L'ordine dei clic non conta: l'annotatore riordina i punti da solo.</p>
+  <p>Se la foto è storta di 90 gradi, ruotala con i pulsanti prima di annotare: gli angoli sono percentuali
+  dell'immagine già ruotata e la rotazione viene salvata. Se ci sono più documenti aggiungi un riquadro per ognuno, con il
+  suo tipo. <em>Ricomincia</em> toglie i punti del riquadro attivo e riparte dal punto 1; <em>Annulla ultimo punto</em>
+  toglie l'ultimo. Togli la spunta &laquo;con piega&raquo; per un passaporto a pagina sola con quattro punti.</p>
+</div>
+
+<div class="row">
+  <label>Foto dal computer
+    <input type="file" id="file" accept="image/*">
+  </label>
+  <label>Foto della cartella
+    <select id="elenco"><option value="">(nessuna)</option></select>
+  </label>
+  <label class="inline"><input type="checkbox" id="solonuove"> solo non annotate</label>
+  <span id="conta" role="status"></span>
+</div>
+<div class="row">
+  <button type="button" id="prec">Precedente</button>
+  <button type="button" id="succ">Successiva</button>
+  <button type="button" id="conferma">Conferma e prossima</button>
+  <button type="button" id="salva">Salva</button>
+  <button type="button" id="proposta">Ripristina proposta</button>
+  <button type="button" id="annulla">Annulla ultimo punto</button>
+  <button type="button" id="azzera">Ricomincia</button>
+</div>
+<div class="row">
+  <button type="button" id="ruotaAnti" title="Ruota la vista di 90 gradi in senso antiorario">Ruota 90° antiorario</button>
+  <button type="button" id="ruotaOrario" title="Ruota la vista di 90 gradi in senso orario">Ruota 90° orario</button>
+  <span id="rot" role="status">Rotazione: 0°</span>
+  <button type="button" id="aggiungi">Aggiungi riquadro</button>
+</div>
+<div id="riquadri" aria-label="Riquadri della foto"></div>
+<p id="status" role="status" aria-live="polite"></p>
+<p id="guida" role="status" aria-live="polite"></p>
+<p id="avviso" role="alert" hidden></p>
+<div id="stage"><canvas id="cv" width="800" height="500"></canvas></div>
+<iframe id="rilevatore" title="rilevatore" tabindex="-1" aria-hidden="true"></iframe>
+
+<script src="lib/metrics.js"></script>
+<script src="lib/rotate.js"></script>
+<script>
+(function () {
+  var GT_URL = '/dev/materiale/banco/ground-truth.json';
+  var FOTO_DIR = '/dev/materiale/banco/foto/';
+  var ELENCO_URL = '/dev/materiale/banco/foto-elenco';
+  var APP_URL = '../index.html';
+  var MAX_BOXES = 6;
+  // Punti di un riquadro nell'ordine dei clic: i quattro angoli, poi per il passaporto con piega
+  // i due estremi della piega. Sono numerati 1..4 o 1..6 e non hanno un ruolo fisso: i quattro
+  // angoli si riordinano (Metrics.orderCorners) e gli estremi della piega si assegnano ai lati
+  // opposti del contorno (Metrics.foldOrder) al disegno e al salvataggio.
+  var KEYS4 = ['tl', 'tr', 'br', 'bl'];   // chiavi del file, mai mostrate
+  var STEP4 = ['in alto a sinistra', 'in alto a destra', 'in basso a destra', 'in basso a sinistra'];
+  var TIPI = [
+    ['cie', "Carta d'identità elettronica (CIE)"], ['patente', 'Patente'],
+    ['ts', 'Tessera sanitaria'], ['passaporto', 'Passaporto']
+  ];
+  var DEFAULT_CORNERS = [{ x: 5, y: 5 }, { x: 95, y: 5 }, { x: 95, y: 95 }, { x: 5, y: 95 }];
+  var COLORS = ['#e53935', '#fb8c00', '#8e24aa', '#00897b', '#6d4c41', '#c0ca33'];   // niente blu: e' della piega
+  var C_PROP = '#ffeb3b';
+  var C_FOLD = '#1565c0';
+  var C_RING = '#ff9100';
+
+  var cv = document.getElementById('cv'), ctx = cv.getContext('2d');
+  var elFile = document.getElementById('file'), elElenco = document.getElementById('elenco');
+  var elStatus = document.getElementById('status');
+  var elNext = document.getElementById('guida'), elConta = document.getElementById('conta');
+  var elSoloNuove = document.getElementById('solonuove');
+  var elBoxes = document.getElementById('riquadri'), elRot = document.getElementById('rot');
+  var btnConferma = document.getElementById('conferma'), btnSalva = document.getElementById('salva');
+  var btnAggiungi = document.getElementById('aggiungi');
+
+  // Un riquadro: tipo, piega (passaporto con piega, sei punti) e i punti in percentuale dell'immagine
+  // ruotata; prop[i] vero = punto ancora solo proposto dal rilevatore; hint = i quattro angoli proposti
+  // dal rilevatore (anelli che pulsano sul punto da mettere) quando i punti non sono già stati messi.
+  // drafts: modifiche non confermate, per non perderle spostandosi tra le foto.
+  var st = {
+    img: null, name: '', blob: null, rot: 0, boxes: [], active: 0, dirty: false, note: '',
+    gt: [], fotos: [], drafts: {}, objUrl: null, drag: null, token: 0, req: 0, busy: false, saved: ''
+  };
+  var proposals = {};
+
+  function say(msg, ok) {
+    elStatus.textContent = msg;
+    elStatus.className = ok === true ? 'ok' : (ok === false ? 'err' : '');
+  }
+
+  function validName(n) {
+    return typeof n === 'string' && n.length > 0 && n.charAt(0) !== '.' && !/[\/\\\0]/.test(n);
+  }
+
+  function round3(v) { return Math.round(v * 1000) / 1000; }
+  function clampPct(v) { return Math.max(0, Math.min(100, v)); }
+  function copyPoints(a) { return a.map(function (p) { return { x: p.x, y: p.y }; }); }
+  function mid(a, b) { return { x: round3((a.x + b.x) / 2), y: round3((a.y + b.y) / 2) }; }
+  function fill(n, v) { var a = []; for (var i = 0; i < n; i++) a.push(v); return a; }
+
+  // ---- riquadri ----
+  function nPts(b) { return b.tipo === 'passaporto' && b.piega ? 6 : 4; }
+  function complete(b) { return b.pts.length === nPts(b); }
+  function newBox(tipo) { return { tipo: tipo, piega: tipo === 'passaporto', pts: [], prop: [], hint: null }; }
+  function copyBox(b) {
+    return { tipo: b.tipo, piega: b.piega, pts: copyPoints(b.pts), prop: b.prop.slice(), hint: b.hint ? copyPoints(b.hint) : null };
+  }
+  function activeBox() { return st.boxes[st.active] || null; }
+  function tipoLabel(t) { return TIPI.filter(function (x) { return x[0] === t; }).map(function (x) { return x[1]; })[0] || t; }
+
+  function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+
+  // Piega proposta per il contorno q = [tl,tr,br,bl]: parallela al lato corto, cioè taglia a metà
+  // il lato lungo (misurato in pixel della vista). Il primo estremo è quello in alto o a sinistra.
+  function defaultFold(q) {
+    var c = q.map(toCanvas);
+    var w = (dist(c[0], c[1]) + dist(c[3], c[2])) / 2, h = (dist(c[0], c[3]) + dist(c[1], c[2])) / 2;
+    return w >= h ? [mid(q[0], q[1]), mid(q[3], q[2])] : [mid(q[0], q[3]), mid(q[1], q[2])];
+  }
+
+  // Da un quadrilatero [tl,tr,br,bl] ai punti del riquadro (sei per il passaporto con piega).
+  function pointsFromQuad(q, b) {
+    return nPts(b) === 6 ? q.concat(defaultFold(q)) : q.slice();
+  }
+
+  // ---- rilevatore: ScanForge.detectDocument nel riquadro nascosto ----
+  // Il documento si carica con srcdoc dopo aver tolto l'@import dei caratteri di Google Fonts:
+  // il riquadro resta della stessa origine ma non fa richieste esterne.
+  var detector = new Promise(function (resolve) {
+    var f = document.getElementById('rilevatore'), done = false;
+    function fin() {
+      if (done) return;
+      done = true;
+      var sf = null;
+      try { sf = f.contentWindow && f.contentWindow.ScanForge; } catch (e) { sf = null; }
+      var ok = sf && sf.io && typeof sf.io.loadImage === 'function' &&
+        typeof sf.io.createOps === 'function' && typeof sf.detectDocument === 'function';
+      resolve(ok ? sf : null);
+    }
+    var t = setTimeout(fin, 20000);
+    f.addEventListener('load', function () { clearTimeout(t); fin(); });
+    fetch(APP_URL, { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function (html) {
+      f.srcdoc = html.replace(/@import\s+url\([^)]*fonts\.googleapis\.com[^)]*\)\s*;?/g, '');
+    }).catch(function () { clearTimeout(t); fin(); });
+  });
+
+  function cleanCorners(c) {
+    var out = KEYS4.map(function (k) {
+      var p = c && c[k];
+      if (!p || typeof p.x !== 'number' || typeof p.y !== 'number' || !isFinite(p.x) || !isFinite(p.y)) return null;
+      return { x: round3(clampPct(p.x)), y: round3(clampPct(p.y)) };
+    });
+    return out.indexOf(null) >= 0 ? null : out;
+  }
+
+  // Proposta per una foto: { corners, found, why }. Con found falso si usano gli angoli di default.
+  function propose(source, key) {
+    if (key && proposals[key]) return Promise.resolve(proposals[key]);
+    var fallback = function (why) { return { corners: copyPoints(DEFAULT_CORNERS), found: false, why: why }; };
+    return detector.then(function (sf) {
+      if (!sf) return fallback('rilevatore non disponibile');
+      return sf.io.loadImage(source, { maxDim: 400 }).then(function (img) {
+        var res = sf.detectDocument(img, sf.io.createOps());
+        var c = res && res.corners ? cleanCorners(res.corners) : null;
+        return c ? { corners: c, found: true, why: '' } : fallback('nessun documento riconosciuto');
+      });
+    }).catch(function () {
+      return fallback('rilevazione non riuscita');
+    }).then(function (p) {
+      if (key) proposals[key] = p;
+      return p;
+    });
+  }
+
+  // Proposta sull'immagine gia' ruotata: con rotazione diversa da 0 la foto si ruota con un
+  // canvas e il rilevatore lavora su quella.
+  function proposeCurrent() {
+    var key = st.blob ? null : st.name + '|' + st.rot;
+    if (key && proposals[key]) return Promise.resolve(proposals[key]);
+    var src;
+    if (st.rot === 0) {
+      src = Promise.resolve(st.blob || FOTO_DIR + encodeURIComponent(st.name));
+    } else {
+      src = new Promise(function (resolve, reject) {
+        var c = Rotate.canvas(st.img, st.img.naturalWidth, st.img.naturalHeight, st.rot);
+        c.toBlob(function (b) { b ? resolve(b) : reject(new Error('toBlob')); }, 'image/png');
+      });
+    }
+    return src.then(function (s) { return propose(s, key); }, function () {
+      return { corners: copyPoints(DEFAULT_CORNERS), found: false, why: 'rilevazione non riuscita' };
+    });
+  }
+
+  // Passaporto con piega: la procedura è guidata, la proposta resta come anello sul punto da mettere.
+  // Gli altri riquadri partono con i punti proposti (gialli).
+  function guided(b) { return b.tipo === 'passaporto' && b.piega; }
+  function applyProposal(b, p, force) {
+    b.hint = copyPoints(p.corners);
+    if (!force && guided(b) && b.pts.length === 0) return;
+    var q = pointsFromQuad(copyPoints(p.corners), b);
+    b.pts = q; b.prop = fill(q.length, true);
+  }
+  function proposalNote(p) {
+    return p.found ? 'Angoli proposti dal rilevatore (gialli).'
+      : 'Rilevatore: ' + p.why + ', angoli di default (gialli).';
+  }
+
+  // ---- elenco e filtro ----
+  function gtEntry(name) {
+    return st.gt.filter(function (e) { return e && e.file === name; })[0] || null;
+  }
+  function annotated(name) { return !!gtEntry(name); }
+  function visible(name) { return !elSoloNuove.checked || !annotated(name); }
+  function visibleList() { return st.fotos.filter(visible); }
+
+  function defaultTipo(name) {
+    var n = String(name).toLowerCase();
+    if (n.indexOf('ts-') === 0) return 'ts';
+    if (n.indexOf('pass-') === 0) return 'passaporto';
+    if (n.indexOf('ci-') === 0) return 'cie';
+    return TIPI[0][0];
+  }
+
+  function entryLabel(e) {
+    var p = Metrics.parseEntry(e);
+    if (p.error) return 'voce non valida';
+    var t = p.riquadri.map(function (r) { return r.tipo; }).join(' + ');
+    return t + (p.rotazione ? ', ' + p.rotazione + '°' : '');
+  }
+
+  function fillList() {
+    elElenco.textContent = '';
+    var o0 = document.createElement('option');
+    o0.value = ''; o0.textContent = st.fotos.length ? '(scegli)' : '(nessuna)';
+    elElenco.appendChild(o0);
+    st.fotos.forEach(function (n) {
+      if (!visible(n) && n !== st.name) return;
+      var e = gtEntry(n), o = document.createElement('option');
+      o.value = n; o.textContent = n + (e ? ' - ' + entryLabel(e) + ' (annotata)' : '');
+      elElenco.appendChild(o);
+    });
+    elElenco.value = st.fotos.indexOf(st.name) >= 0 ? st.name : '';
+    updateCount();
+  }
+
+  function updateCount() {
+    var list = visibleList(), i = list.indexOf(st.name);
+    var done = st.fotos.filter(annotated).length;
+    elConta.textContent = st.fotos.length
+      ? (i >= 0 ? (i + 1) : '-') + ' di ' + list.length + ' (annotate ' + done + ' di ' + st.fotos.length + ')'
+      : (st.img ? 'foto dal computer' : '');
+  }
+
+  // Foto successiva o precedente tra quelle visibili, a partire da name (anche se non è in elenco).
+  function neighbour(name, dir) {
+    var i = st.fotos.indexOf(name);
+    if (i < 0) i = dir > 0 ? -1 : st.fotos.length;
+    for (var j = i + dir; j >= 0 && j < st.fotos.length; j += dir) {
+      if (visible(st.fotos[j])) return st.fotos[j];
+    }
+    return null;
+  }
+
+  // ---- pannello dei riquadri ----
+  function renderBoxes() {
+    elBoxes.textContent = '';
+    st.boxes.forEach(function (b, i) {
+      var row = document.createElement('div');
+      row.className = 'box' + (i === st.active ? ' active' : '');
+      row.style.borderLeftColor = COLORS[i % COLORS.length];
+
+      var pick = document.createElement('button');
+      pick.type = 'button'; pick.textContent = 'Riquadro ' + (i + 1);
+      pick.setAttribute('aria-pressed', i === st.active ? 'true' : 'false');
+      pick.addEventListener('click', function () { st.active = i; renderBoxes(); draw(); });
+      row.appendChild(pick);
+
+      var lt = document.createElement('label');
+      lt.appendChild(document.createTextNode('Tipo'));
+      var sel = document.createElement('select');
+      TIPI.forEach(function (t) {
+        var o = document.createElement('option');
+        o.value = t[0]; o.textContent = t[1];
+        sel.appendChild(o);
+      });
+      sel.value = b.tipo;
+      sel.addEventListener('change', function () { sel.blur(); setTipo(i, sel.value, b.piega); });
+      lt.appendChild(sel);
+      row.appendChild(lt);
+
+      if (b.tipo === 'passaporto') {
+        var ld = document.createElement('label');
+        var cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.checked = b.piega;
+        cb.addEventListener('change', function () { cb.blur(); setTipo(i, 'passaporto', cb.checked); });
+        ld.appendChild(cb);
+        ld.appendChild(document.createTextNode('con piega (6 punti)'));
+        row.appendChild(ld);
+      }
+
+      var cnt = document.createElement('span');
+      cnt.className = 'cnt';
+      cnt.textContent = complete(b) ? nPts(b) + ' punti messi' : 'Punto ' + (b.pts.length + 1) + ' di ' + nPts(b);
+      row.appendChild(cnt);
+
+      var rm = document.createElement('button');
+      rm.type = 'button'; rm.textContent = 'Rimuovi riquadro';
+      rm.addEventListener('click', function () { removeBox(i); });
+      row.appendChild(rm);
+      elBoxes.appendChild(row);
+    });
+    btnAggiungi.disabled = !st.img || st.boxes.length >= MAX_BOXES;
+    elRot.textContent = 'Rotazione: ' + st.rot + '°';
+  }
+
+  // Cambio di tipo o di passaporto con o senza piega: i punti già messi si convertono, se possibile.
+  function setTipo(i, tipo, piega) {
+    var b = st.boxes[i];
+    if (!b) return;
+    var oldN = nPts(b), was = b.pts.slice(), wasProp = b.prop.slice();
+    b.tipo = tipo; b.piega = tipo === 'passaporto' ? !!piega : false;
+    var newN = nPts(b);
+    if (newN < oldN) {
+      b.pts = was.slice(0, newN); b.prop = wasProp.slice(0, newN);
+    } else if (newN > oldN) {
+      if (was.length === oldN && wasProp.every(function (v) { return v; })) {
+        // solo proposte: il passaporto con piega riparte guidato e le proposte diventano anelli
+        b.hint = copyPoints(was); b.pts = []; b.prop = [];
+      } else if (was.length === oldN) {
+        b.pts = pointsFromQuad(was, b); b.prop = wasProp.concat([true, true]);
+      }
+    }
+    st.dirty = true; renderBoxes(); draw();
+  }
+
+  function addBox() {
+    if (!st.img || st.busy) return;
+    if (st.boxes.length >= MAX_BOXES) { say('Al massimo ' + MAX_BOXES + ' riquadri per foto.', false); return; }
+    var prev = activeBox();
+    var b = newBox(prev ? prev.tipo : defaultTipo(st.name));
+    st.boxes.push(b); st.active = st.boxes.length - 1; st.dirty = true;
+    renderBoxes(); draw();
+    var my = st.token;
+    proposeCurrent().then(function (p) {
+      if (my !== st.token || st.boxes.indexOf(b) < 0 || b.pts.length > 0) return;
+      applyProposal(b, p); renderBoxes(); draw();
+    });
+  }
+
+  function removeBox(i) {
+    if (st.busy) return;
+    if (st.boxes.length <= 1) { say('Deve restare almeno un riquadro: usa "Ricomincia" per ricominciare.', false); return; }
+    st.boxes.splice(i, 1);
+    if (st.active >= st.boxes.length) st.active = st.boxes.length - 1;
+    else if (i < st.active) st.active--;
+    st.dirty = true; renderBoxes(); draw();
+  }
+
+  // ---- disegno ----
+  function layout() {
+    if (!st.img) { cv.width = 800; cv.height = 500; return; }
+    var d = Rotate.size(st.img.naturalWidth, st.img.naturalHeight, st.rot);
+    var maxW = Math.min(1100, Math.max(300, window.innerWidth - 60));
+    var k = Math.min(1, maxW / d.w);
+    cv.width = Math.round(d.w * k);
+    cv.height = Math.round(d.h * k);
+  }
+
+  function toCanvas(p) { return { x: p.x / 100 * cv.width, y: p.y / 100 * cv.height }; }
+
+  // Frase guida del punto da mettere, un clic alla volta, oppure l'invito a confermare.
+  function nextText() {
+    if (!st.img) return '';
+    var b = activeBox();
+    if (!b) return '';
+    var pre = st.boxes.length > 1 ? 'Riquadro ' + (st.active + 1) + ' - ' : '';
+    var n = nPts(b), k = b.pts.length;
+    if (k < n) {
+      var step = (k + 1) + ' di ' + n + ': ';
+      if (k >= 4) {
+        return pre + step + (k === 4 ? "clicca UN ESTREMO DELLA PIEGA (dove la piega tocca il bordo del passaporto)"
+          : "clicca L'ALTRO ESTREMO DELLA PIEGA (sul bordo opposto)");
+      }
+      if (n === 6) return pre + step + "clicca l'angolo " + STEP4[k].toUpperCase() + (k === 0 ? ' del passaporto aperto' : '');
+      return pre + step + "clicca l'angolo " + STEP4[k];
+    }
+    if (b.prop.some(function (v) { return v; })) {
+      return pre + (st.note ? st.note + ' ' : 'Punti proposti dal rilevatore (gialli). ') +
+        'Trascina quelli sbagliati, poi premi Invio.';
+    }
+    return annotated(st.name) && !st.dirty ? pre + 'Foto già annotata: trascina i punti per correggere, poi premi Invio.'
+      : pre + 'Fatto: controlla e premi Invio.';
+  }
+
+  function strokePath(pts, idx, close, dash, width, color) {
+    ctx.beginPath();
+    idx.forEach(function (j, n) { var p = pts[j]; n ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
+    if (close) ctx.closePath();
+    ctx.setLineDash(dash);
+    ctx.lineWidth = width; ctx.strokeStyle = color; ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  function fillPath(pts, idx, color) {
+    ctx.beginPath();
+    idx.forEach(function (j, n) { var p = pts[j]; n ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); });
+    ctx.closePath();
+    ctx.fillStyle = color; ctx.fill();
+  }
+
+  // Contorno e piega del riquadro in percentuale, con gli angoli già riordinati (senso orario dal
+  // punto in alto a sinistra): serve a disegnare e a derivare le metà qualunque sia l'ordine dei
+  // clic. c è null con meno di quattro punti, piega è null senza i due estremi.
+  function geomOf(b) {
+    var p = b.pts;
+    if (p.length < 4) return { c: null, piega: null };
+    var o = Metrics.orderCorners(p.slice(0, 4));
+    return {
+      c: { tl: o[0], tr: o[1], br: o[2], bl: o[3] },
+      piega: nPts(b) === 6 && p.length === 6 ? { top: p[4], bottom: p[5] } : null
+    };
+  }
+
+  // Le due metà derivate (punti della vista) oppure null se la piega non è valida o manca.
+  function halvesOf(b) {
+    var g = geomOf(b), h = g.piega ? Metrics.halves(g.c, g.piega) : null;
+    return h && h.map(function (q) { return [q.tl, q.tr, q.br, q.bl].map(toCanvas); });
+  }
+
+  function foldBad(b) {
+    var g = geomOf(b);
+    return !!g.piega && !Metrics.foldInfo(g.c, g.piega).ok;
+  }
+
+  // Cerchio numerato (angoli) o quadrato numerato (estremi della piega).
+  function marker(p, num, square, fillColor, textColor, r) {
+    ctx.beginPath();
+    if (square) ctx.rect(p.x - r, p.y - r, 2 * r, 2 * r); else ctx.arc(p.x, p.y, r, 0, Math.PI * 2);
+    ctx.fillStyle = fillColor; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#fff'; ctx.stroke();
+    ctx.fillStyle = textColor; ctx.font = 'bold 12px system-ui';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(num), p.x, p.y + 0.5);
+    ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+  }
+
+  function drawBox(b, bi) {
+    var active = bi === st.active, color = COLORS[bi % COLORS.length];
+    var pts = b.pts.map(toCanvas), n = pts.length, withFold = nPts(b) === 6;
+    ctx.globalAlpha = active ? 1 : 0.65;
+    var hv = halvesOf(b);
+    if (hv) {
+      // due metà con tinte diverse: quadrilateri costruiti dai lati, mai linee che si incrociano
+      fillPath(hv[0], [0, 1, 2, 3], 'rgba(255,255,255,0.18)');
+      fillPath(hv[1], [0, 1, 2, 3], 'rgba(0,0,0,0.18)');
+    }
+    if (n > 1) {
+      var w = active ? 3 : 2;
+      if (n >= 4) {
+        var g = geomOf(b), o = [g.c.tl, g.c.tr, g.c.br, g.c.bl].map(toCanvas);
+        strokePath(o, [0, 1, 2, 3], true, [], w, color);
+        strokePath(o, [0, 1, 2, 3], true, [], 1, '#000');
+      } else {
+        var idx = pts.map(function (_, j) { return j; });
+        strokePath(pts, idx, false, [], w, color);
+        strokePath(pts, idx, false, [], 1, '#000');
+      }
+      if (withFold && n === 6) {
+        strokePath(pts, [4, 5], false, [], w, C_FOLD);
+        strokePath(pts, [4, 5], false, [], 1, '#000');
+      }
+    }
+    pts.forEach(function (p, i) {
+      var prop = !!b.prop[i], isFold = i >= 4;
+      marker(p, i + 1, isFold, prop ? C_PROP : (isFold ? C_FOLD : color), prop ? '#000' : '#fff', active ? 11 : 10);
+    });
+    ctx.globalAlpha = 1;
+  }
+
+  // Anello che pulsa sulla posizione proposta dal rilevatore per il prossimo angolo da mettere.
+  function ringFor(b) {
+    return b && b.hint && b.pts.length < 4 && b.pts.length < nPts(b) ? b.hint[b.pts.length] : null;
+  }
+  function drawRing(p) {
+    var c = toCanvas(p), t = Date.now() / 260, r = 15 + 4 * Math.sin(t);
+    ctx.beginPath(); ctx.arc(c.x, c.y, r, 0, Math.PI * 2);
+    ctx.lineWidth = 5; ctx.strokeStyle = '#fff'; ctx.stroke();
+    ctx.lineWidth = 3; ctx.strokeStyle = C_RING; ctx.stroke();
+  }
+  var pulsing = false;
+  function pulse() {
+    if (!st.img || !ringFor(activeBox())) { pulsing = false; return; }
+    draw();
+    requestAnimationFrame(pulse);
+  }
+
+  // Avviso arancione, senza bloccare, se la piega non unisce due lati opposti.
+  function updateWarning() {
+    var bad = [];
+    st.boxes.forEach(function (b, i) { if (foldBad(b)) bad.push(i + 1); });
+    var el = document.getElementById('avviso');
+    if (!bad.length) { el.hidden = true; el.textContent = ''; return; }
+    el.hidden = false;
+    el.textContent = (st.boxes.length > 1 ? 'Riquadro ' + bad.join(', ') + ': la' : 'La') +
+      ' piega dovrebbe unire due lati opposti del passaporto.';
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (st.img) Rotate.draw(ctx, st.img, st.img.naturalWidth, st.img.naturalHeight, st.rot, cv.width, cv.height);
+    else { ctx.fillStyle = '#777'; ctx.font = '16px system-ui'; ctx.fillText('Scegli una foto', 20, 30); }
+    // prima i riquadri non attivi, poi quello attivo sopra
+    st.boxes.forEach(function (b, i) { if (i !== st.active) drawBox(b, i); });
+    if (activeBox()) drawBox(activeBox(), st.active);
+    var ring = ringFor(activeBox());
+    if (ring) drawRing(ring);
+    var guide = nextText();
+    if (elNext.textContent !== guide) elNext.textContent = guide;
+    updateWarning();
+    if (ring && !pulsing) { pulsing = true; requestAnimationFrame(pulse); }
+  }
+
+  function eventPoint(ev) {
+    var r = cv.getBoundingClientRect();
+    var x = (ev.clientX - r.left) / r.width * cv.width;
+    var y = (ev.clientY - r.top) / r.height * cv.height;
+    return { cx: x, cy: y };
+  }
+
+  // Punto piu' vicino tra tutti i riquadri, con la preferenza per quello attivo a parita' di distanza.
+  function nearest(cx, cy) {
+    var best = null, bd = 14 * 14;
+    st.boxes.forEach(function (b, bi) {
+      b.pts.forEach(function (p, i) {
+        var c = toCanvas(p), d = (c.x - cx) * (c.x - cx) + (c.y - cy) * (c.y - cy);
+        if (d < bd || (d === bd && bi === st.active)) { bd = d; best = { b: bi, i: i }; }
+      });
+    });
+    return best;
+  }
+
+  function pctOf(cx, cy) {
+    return { x: round3(clampPct(cx / cv.width * 100)), y: round3(clampPct(cy / cv.height * 100)) };
+  }
+
+  cv.addEventListener('pointerdown', function (ev) {
+    if (!st.img || st.busy) return;
+    var e = eventPoint(ev), hit = nearest(e.cx, e.cy), b = activeBox();
+    if (hit) {
+      st.drag = hit;
+      try { cv.setPointerCapture(ev.pointerId); } catch (err) { /* puntatore non attivo: si trascina lo stesso */ }
+      if (st.active !== hit.b) { st.active = hit.b; renderBoxes(); }
+    } else if (b && b.pts.length < nPts(b)) {
+      // un clic dentro l'anello proposto mette il punto esattamente sulla proposta del rilevatore
+      var ring = ringFor(b), rc = ring ? toCanvas(ring) : null;
+      var snap = rc && Math.hypot(rc.x - e.cx, rc.y - e.cy) <= 20;
+      b.pts.push(snap ? { x: ring.x, y: ring.y } : pctOf(e.cx, e.cy)); b.prop.push(false); st.dirty = true; say('');
+      renderBoxes();
+    }
+    draw();
+  });
+  cv.addEventListener('pointermove', function (ev) {
+    if (!st.drag) return;
+    var b = st.boxes[st.drag.b];
+    if (!b) { st.drag = null; return; }
+    var e = eventPoint(ev);
+    b.pts[st.drag.i] = pctOf(e.cx, e.cy);
+    b.prop[st.drag.i] = false;   // spostato a mano: non è più solo una proposta
+    st.dirty = true;
+    draw();
+  });
+  function endDrag() { st.drag = null; }
+  cv.addEventListener('pointerup', endDrag);
+  cv.addEventListener('pointercancel', endDrag);
+
+  // ---- rotazione ----
+  // I punti sono numerati e senza un ruolo fisso, quindi dopo la rotazione basta spostarli dove
+  // sta ora lo stesso punto della foto: angoli e piega si riordinano da soli. Un riquadro a metà
+  // (alcuni punti messi, non tutti) riparte da zero perche' la frase guida non avrebbe piu' senso.
+  function turnBox(b, turn) {
+    b.hint = null;
+    if (b.pts.length && !complete(b)) { b.pts = []; b.prop = []; return; }
+    b.pts = b.pts.map(function (p) {
+      var q = Metrics.rotatePct(p, turn);
+      return { x: round3(q.x), y: round3(q.y) };
+    });
+  }
+
+  function onlyProposed(b) { return complete(b) && b.prop.every(function (v) { return v; }); }
+
+  // dir +1 = 90 gradi in senso orario, -1 = antiorario. I punti già messi seguono la foto.
+  function rotate(dir) {
+    if (!st.img || st.busy) return;
+    var turn = dir > 0 ? 90 : 270;
+    st.rot = (st.rot + turn) % 360;
+    st.boxes.forEach(function (b) { turnBox(b, turn); });
+    st.dirty = true; layout(); renderBoxes(); draw();
+    // Il rilevatore si rilancia sull'immagine ruotata per le sole proposte e per gli anelli.
+    var wants = function (b) { return onlyProposed(b) || b.pts.length === 0; };
+    if (!st.boxes.some(wants)) return;
+    var my = st.token, rot = st.rot;
+    say('Rilevazione degli angoli in corso...');
+    proposeCurrent().then(function (p) {
+      if (my !== st.token || rot !== st.rot) return;
+      st.boxes.forEach(function (b) {
+        if (!wants(b)) return;
+        if (b.pts.length === 0) b.hint = copyPoints(p.corners); else applyProposal(b, p);
+      });
+      st.note = proposalNote(p);
+      renderBoxes(); draw();
+      say('Rotazione ' + st.rot + '°: ' + (p.found ? 'proposta del rilevatore aggiornata.' : p.why + ', angoli di default.'), true);
+    });
+  }
+
+  // ---- apertura di una foto ----
+  function loadImg(src) {
+    return new Promise(function (resolve) {
+      var img = new Image();
+      img.onload = function () { resolve(img); };
+      img.onerror = function () { resolve(null); };
+      img.src = src;
+    });
+  }
+
+  function leave() {
+    if (st.img && st.name && st.dirty) {
+      st.drafts[st.name] = { rot: st.rot, boxes: st.boxes.map(copyBox), active: st.active, note: st.note };
+    }
+  }
+
+  // Riquadri da una voce del ground-truth (forma vecchia o nuova).
+  function boxesFromEntry(parsed) {
+    return parsed.riquadri.map(function (r) {
+      var b = newBox(r.tipo), c = r.quad;
+      var cp = function (p) { return { x: p.x, y: p.y }; };
+      if (r.piega) {
+        b.piega = true;
+        b.pts = [cp(c.tl), cp(c.tr), cp(c.br), cp(c.bl), cp(r.piega.top), cp(r.piega.bottom)];   // numeri 1..6
+      } else {
+        b.piega = false;
+        b.pts = KEYS4.map(function (k) { return cp(c[k]); });
+      }
+      b.prop = fill(b.pts.length, false);
+      return b;
+    });
+  }
+
+  // blob: file scelto dal computer; senza blob la foto si legge dalla cartella del banco.
+  function openPhoto(name, blob) {
+    if (st.busy) return Promise.resolve(false);
+    var my = ++st.req;
+    var src = blob ? URL.createObjectURL(blob) : FOTO_DIR + encodeURIComponent(name);
+    return loadImg(src).then(function (img) {
+      if (!img || my !== st.req) {
+        if (blob) URL.revokeObjectURL(src);
+        if (!img) say('Foto non trovata o non leggibile: ' + name, false);
+        return false;
+      }
+      leave();
+      st.token = my;
+      var pre = st.saved ? st.saved + ' ' : '';
+      st.saved = '';
+      if (st.objUrl) URL.revokeObjectURL(st.objUrl);
+      st.objUrl = blob ? src : null;
+      st.img = img; st.name = name; st.blob = blob || null; st.note = ''; st.drag = null;
+      var ex = gtEntry(name), draft = st.drafts[name], parsed = ex ? Metrics.parseEntry(ex) : null;
+      var bad = parsed && parsed.error ? parsed.error : '';
+      if (bad) parsed = null;
+      if (draft) {
+        st.rot = draft.rot; st.boxes = draft.boxes.map(copyBox); st.active = draft.active; st.note = draft.note || '';
+        st.dirty = true;
+      } else if (parsed) {
+        st.rot = parsed.rotazione; st.boxes = boxesFromEntry(parsed); st.active = 0; st.dirty = false;
+      } else {
+        st.rot = 0; st.boxes = [newBox(defaultTipo(name))]; st.active = 0; st.dirty = false;
+      }
+      layout(); fillList(); renderBoxes(); draw();
+      if (bad) say(pre + 'La voce salvata per ' + name + ' non è valida (' + bad + '): annota di nuovo.', false);
+      if (draft || parsed) {
+        if (!bad) say(pre + 'Foto aperta: ' + name + (draft ? ' (modifiche non confermate ripristinate)' : ''), true);
+        return true;
+      }
+      var first = st.boxes[0];
+      if (!bad) say(pre + 'Rilevazione degli angoli in corso...');
+      proposeCurrent().then(function (p) {
+        if (my !== st.token || first.pts.length > 0) return;
+        applyProposal(first, p); st.note = proposalNote(p); renderBoxes(); draw();
+        if (!bad) say(pre + 'Foto aperta: ' + name, true);
+      });
+      return true;
+    });
+  }
+
+  function goTo(name) {
+    if (!name) return Promise.resolve(false);
+    return openPhoto(name, null);
+  }
+  function goNext() { var n = neighbour(st.name, 1); if (n) return goTo(n); say('Sei all\'ultima foto.'); return Promise.resolve(false); }
+  function goPrev() { var n = neighbour(st.name, -1); if (n) return goTo(n); say('Sei alla prima foto.'); return Promise.resolve(false); }
+
+  elFile.addEventListener('change', function () {
+    var f = elFile.files && elFile.files[0];
+    if (!f) return;
+    if (!validName(f.name)) { say('Nome file non ammesso: ' + f.name, false); return; }
+    openPhoto(f.name, f).then(function (ok) {
+      if (!ok) say('Il file non si apre come immagine.', false);
+    });
+  });
+
+  elElenco.addEventListener('change', function () {
+    var name = elElenco.value;
+    elElenco.blur();
+    if (name) goTo(name);
+  });
+
+  elSoloNuove.addEventListener('change', function () { elSoloNuove.blur(); fillList(); });
+
+  // ---- ground truth ----
+  // Lista vuota se il file non esiste ancora (404); errore se non è leggibile.
+  function loadGt() {
+    return fetch(GT_URL, { cache: 'no-store' }).then(function (r) {
+      if (r.status === 404) return [];
+      if (!r.ok) throw new Error('lettura di ground-truth.json: HTTP ' + r.status);
+      return r.json();
+    }).then(function (data) {
+      if (!Array.isArray(data)) throw new Error('ground-truth.json non è una lista');
+      return data;
+    });
+  }
+
+  function loadElenco() {
+    return fetch(ELENCO_URL, { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    }).then(function (data) {
+      if (!Array.isArray(data)) throw new Error('elenco non valido');
+      return data.filter(function (n) { return validName(n) && /\.(jpe?g|png)$/i.test(n); });
+    });
+  }
+
+  function setBusy(b) {
+    st.busy = b;
+    btnConferma.disabled = b; btnSalva.disabled = b;
+  }
+
+  function cleanPt(p) { return { x: round3(clampPct(p.x)), y: round3(clampPct(p.y)) }; }
+
+  // Il riquadro nel formato del file. I quattro angoli si riordinano da soli (senso orario dal
+  // punto in alto a sinistra) e gli estremi della piega si assegnano ai lati opposti del
+  // contorno: top e' quello piu' vicino al lato superiore (piega verticale) o sinistro (orizzontale).
+  function riquadroOf(b) {
+    var p = b.pts.map(cleanPt), o = Metrics.orderCorners(p.slice(0, 4));
+    var c = { tl: o[0], tr: o[1], br: o[2], bl: o[3] };
+    if (nPts(b) === 6) {
+      var f = Metrics.foldOrder(c, p[4], p[5]);
+      return { tipo: b.tipo, corners: c, piega: { top: f.top, bottom: f.bottom } };
+    }
+    return { tipo: b.tipo, corners: c };
+  }
+
+  // Voce da salvare per la foto aperta. Un solo riquadro con quattro punti e nessuna rotazione
+  // resta nella forma vecchia {file, tipo, corners}; il resto va nella forma nuova.
+  // Stringa con il motivo se i punti non sono completi.
+  function buildEntry() {
+    for (var i = 0; i < st.boxes.length; i++) {
+      var b = st.boxes[i];
+      if (!complete(b)) {
+        return 'Il riquadro ' + (i + 1) + ' ha ' + b.pts.length + ' punti su ' + nPts(b) + '.';
+      }
+    }
+    var rq = st.boxes.map(riquadroOf);
+    // dopo il riordino il contorno non si incrocia, salvo punti allineati
+    for (var k = 0; k < rq.length; k++) {
+      if (Metrics.selfIntersects(rq[k].corners)) {
+        return 'Riquadro ' + (k + 1) + ': i quattro punti non formano un quadrilatero (sono allineati?).';
+      }
+    }
+    if (rq.length === 1 && st.rot === 0 && !rq[0].piega) {
+      return { file: st.name, tipo: rq[0].tipo, corners: rq[0].corners };
+    }
+    var e = { file: st.name };
+    if (st.rot) e.rotazione = st.rot;
+    e.riquadri = rq;
+    return e;
+  }
+
+  // Scrive la voce della foto aperta. Con advance passa alla prossima foto visibile.
+  function saveCurrent(advance) {
+    if (st.busy) return Promise.resolve(false);
+    if (!st.img || !st.name) { say('Apri prima una foto.', false); return Promise.resolve(false); }
+    var entry = buildEntry();
+    if (typeof entry === 'string') { say(entry, false); return Promise.resolve(false); }
+    var name = st.name;
+    setBusy(true);
+    // Si rilegge il file prima di scrivere: se non è leggibile non si rischia di perdere voci.
+    return loadGt().then(function (list) {
+      var idx = -1;
+      list.forEach(function (e, i) { if (e && e.file === entry.file) idx = i; });
+      if (idx >= 0) list[idx] = entry; else list.push(entry);
+      return fetch('/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(list)
+      }).then(function (r) {
+        return r.json().catch(function () { return {}; }).then(function (j) {
+          if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+          st.gt = list;
+          delete st.drafts[name];
+          st.boxes.forEach(function (b) { b.prop = fill(b.pts.length, false); });
+          st.dirty = false; st.note = '';
+          setBusy(false);
+          fillList(); renderBoxes(); draw();
+          var msg = 'Salvato ' + name + ' (' + (idx >= 0 ? 'sostituita' : 'aggiunta') + ' la voce, ' + list.length + ' in tutto).';
+          say(msg, true);
+          if (!advance) return true;
+          var n = neighbour(name, 1);
+          if (!n) { say(msg + ' Era l\'ultima foto.', true); return true; }
+          st.saved = 'Salvato ' + name + '.';
+          return goTo(n).then(function () { st.saved = ''; return true; });
+        });
+      });
+    }).catch(function (e) {
+      setBusy(false);
+      say('Salvataggio non riuscito: ' + (e && e.message || e), false);
+      return false;
+    });
+  }
+
+  document.getElementById('annulla').addEventListener('click', function () {
+    var b = activeBox();
+    if (!b) return;
+    b.pts.pop(); b.prop.pop(); st.dirty = true; renderBoxes(); draw();
+  });
+  document.getElementById('azzera').addEventListener('click', function () {
+    var b = activeBox();
+    if (!b) return;
+    b.pts = []; b.prop = []; st.dirty = true; st.note = ''; renderBoxes(); draw();
+    if (!b.hint) {
+      // gli anelli sul punto da mettere vengono dal rilevatore
+      var my = st.token;
+      proposeCurrent().then(function (p) {
+        if (my !== st.token || st.boxes.indexOf(b) < 0 || b.pts.length >= 4 || b.hint) return;
+        b.hint = copyPoints(p.corners); draw();
+      });
+    }
+  });
+  document.getElementById('proposta').addEventListener('click', function () {
+    var b = activeBox();
+    if (!st.img || !b) return;
+    var my = st.token;
+    say('Rilevazione degli angoli in corso...');
+    proposeCurrent().then(function (p) {
+      if (my !== st.token || st.boxes.indexOf(b) < 0) return;
+      applyProposal(b, p, true); st.dirty = true; st.note = proposalNote(p); renderBoxes(); draw();
+      say(p.found ? 'Proposta del rilevatore ripristinata.' : 'Rilevatore: ' + p.why + ', angoli di default.', true);
+    });
+  });
+  var btnHow = document.getElementById('comeSiUsa');
+  btnHow.addEventListener('click', function () {
+    var el = document.getElementById('istruzioni');
+    el.hidden = !el.hidden;
+    btnHow.setAttribute('aria-expanded', el.hidden ? 'false' : 'true');
+  });
+  document.getElementById('ruotaAnti').addEventListener('click', function () { rotate(-1); });
+  document.getElementById('ruotaOrario').addEventListener('click', function () { rotate(1); });
+  btnAggiungi.addEventListener('click', addBox);
+  btnSalva.addEventListener('click', function () { saveCurrent(false); });
+  btnConferma.addEventListener('click', function () { saveCurrent(true); });
+  document.getElementById('prec').addEventListener('click', function () { if (!st.busy) goPrev(); });
+  document.getElementById('succ').addEventListener('click', function () { if (!st.busy) goNext(); });
+
+  // Invio conferma e passa alla prossima, frecce si spostano senza salvare.
+  document.addEventListener('keydown', function (ev) {
+    if (ev.defaultPrevented || ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey || ev.repeat) return;
+    var tag = ev.target && ev.target.tagName;
+    if (tag === 'SELECT' || tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (ev.key === 'Enter') {
+      if (tag === 'BUTTON') return;   // il pulsante ha già il suo clic
+      ev.preventDefault(); saveCurrent(true);
+    } else if (ev.key === 'ArrowRight') {
+      ev.preventDefault(); if (!st.busy) goNext();
+    } else if (ev.key === 'ArrowLeft') {
+      ev.preventDefault(); if (!st.busy) goPrev();
+    }
+  });
+
+  window.addEventListener('resize', function () { layout(); draw(); });
+
+  // Per le prove automatiche del banco.
+  var ready = Promise.all([
+    loadGt().then(function (list) { st.gt = list; return null; }, function (e) { return 'ground-truth: ' + e.message; }),
+    loadElenco().then(function (list) { st.fotos = list; return null; }, function () { return 'elenco delle foto non disponibile'; })
+  ]).then(function (errs) {
+    fillList();
+    var problem = errs.filter(Boolean)[0];
+    if (problem) { say(problem + '. Riavvia il server o scegli la foto dal computer.', false); return; }
+    if (!st.fotos.length) {
+      say('Nessuna foto in dev/materiale/banco/foto/: mettile lì e ricarica la pagina, oppure scegli un file dal computer.');
+      return;
+    }
+    var first = st.fotos.filter(function (n) { return !annotated(n); })[0] || st.fotos[0];
+    return goTo(first);
+  });
+
+  window.__annota = {
+    state: st, ready: ready, proposals: proposals, openPhoto: goTo, save: saveCurrent,
+    rotate: rotate, addBox: addBox, removeBox: removeBox, setTipo: setTipo, buildEntry: buildEntry
+  };
+
+  layout(); renderBoxes(); draw();
+})();
+</script>
+</body>
+</html>

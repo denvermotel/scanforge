@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>ScanForge - banco di confronto</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 24px; color: #222; }
+  table { border-collapse: collapse; margin-top: 12px; }
+  td, th { border: 1px solid #ccc; padding: 4px 10px; text-align: left; }
+  .pass { color: #0a7a2f; }
+  .fail { color: #b00020; font-weight: 600; }
+  #summary { font-weight: 600; }
+  h2 { margin-top: 28px; }
+  iframe { position: absolute; left: -9999px; width: 800px; height: 600px; border: 0; }
+</style>
+</head>
+<body>
+<h1>Banco di confronto</h1>
+<p id="summary">In corso...</p>
+<h2>Identità (riferimento 0.2 contro se stesso e contro il nuovo core)</h2>
+<table id="results"><thead><tr><th>Caso</th><th>Esito</th><th>ref-vs-ref</th><th>nuovo vs 0.2</th><th>app vs 0.2</th></tr></thead><tbody></tbody></table>
+<h2>Foto reali</h2>
+<p id="real-note">In corso...</p>
+<table id="real" hidden><thead><tr><th>Foto / variante</th><th>Esito</th><th>Rilevamento</th><th>Proporzioni</th><th>Tempi per passo (ms)</th><th>Peso (byte)</th><th>Identità con 0.2</th></tr></thead><tbody></tbody></table>
+<iframe id="app" src="../index.html" title="app"></iframe>
+<script src="reference/ref02.js"></script>
+<script src="lib/synth.js"></script>
+<script src="lib/compare.js"></script>
+<script src="lib/metrics.js"></script>
+<script src="lib/rotate.js"></script>
+<script src="lib/whatsapp.js"></script>
+<script>
+(function () {
+  var TIMEOUT_MS = 60000;
+  var cases = [];   // { name, ok, detail, nuovo, app }
+
+  // Attesa con limite: se la promise non si risolve la pagina deve comunque finire.
+  function withTimeout(p, ms, label) {
+    return new Promise(function (resolve, reject) {
+      var t = setTimeout(function () { reject(new Error('timeout ' + label)); }, ms);
+      Promise.resolve(p).then(function (v) { clearTimeout(t); resolve(v); },
+                              function (e) { clearTimeout(t); reject(e); });
+    });
+  }
+
+  function record(name, ok, detail, nuovo, app) {
+    cases.push({ name: name, ok: ok, detail: detail || '', nuovo: nuovo || '', app: app || '' });
+  }
+
+  // ScanForge dell'app incorporata (stessa origine): il nuovo codice da confrontare con la 0.2.
+  function appReady() {
+    var f = document.getElementById('app');
+    return new Promise(function (resolve) {
+      var done = false;
+      function fin() { if (!done) { done = true; resolve(f.contentWindow && f.contentWindow.ScanForge); } }
+      var t = setTimeout(fin, 15000);
+      if (f.contentDocument && f.contentDocument.readyState === 'complete' &&
+          f.contentWindow.location.pathname === '/index.html') { clearTimeout(t); fin(); return; }
+      f.addEventListener('load', function () { clearTimeout(t); fin(); });
+    });
+  }
+
+  // ---- auto-verifica del confronto (sempre per prima) ----
+  function selfcheck() {
+    var name = 'selfcheck';
+    try {
+      var w = 6, h = 4, x = new ImageData(w, h);
+      for (var i = 0; i < x.data.length; i++) x.data[i] = (i * 37 + 11) & 255;
+
+      var d0 = Compare.diff(x, x);
+      if (!(d0.same === true && d0.diffPixels === 0 && d0.sizeMismatch === false && d0.maxDelta === 0))
+        return record(name, false, 'identità: ' + JSON.stringify(d0));
+
+      var y = new ImageData(new Uint8ClampedArray(x.data), w, h);
+      y.data[0] = (y.data[0] + 5) & 255;           // un solo byte, canale R del pixel (0,0)
+      var d1 = Compare.diff(x, y);
+      if (!(d1.same === false && d1.diffPixels === 1 && d1.maxDelta > 0))
+        return record(name, false, 'un byte: ' + JSON.stringify(d1));
+
+      var z = new ImageData(w + 1, h);
+      var d2 = Compare.diff(x, z);
+      if (!(d2.sizeMismatch === true && d2.same === false))
+        return record(name, false, 'dimensioni: ' + JSON.stringify(d2));
+
+      record(name, true, 'identità, un byte, dimensioni diverse');
+    } catch (e) {
+      record(name, false, String(e && e.message || e));
+    }
+  }
+
+  // ---- matrice immagini x configurazioni ----
+  function merge(over) { return Object.assign({}, Ref02.defaultSettings(), over); }
+
+  function BENCH_CASES() {
+    var imgNames = ['A-ombra', 'B-scuro', 'C-piccola', 'D-wa'];
+    var P = Ref02.PRESETS;
+    var configs = [
+      { id: 'preset-document', settings: merge(P.document) },
+      { id: 'preset-photo',    settings: merge(P.photo) },
+      { id: 'preset-id',       settings: merge(P.id) },
+      { id: 'preset-receipt',  settings: merge(P.receipt) },
+      { id: 'solo-prospettiva', settings: merge({ perspective: true }) },
+      { id: 'solo-ombre',      settings: merge({ perspective: false, shadows: true }) },
+      { id: 'solo-nitidezza',  settings: merge({ perspective: false, sharpen: 5 }) },
+      { id: 'keystone',        settings: merge({ perspective: false, keystoneV: 10, keystoneH: -10 }) },
+      { id: 'rotazione',       settings: merge({ perspective: false, rotFine: 3 }) },
+      { id: 'combinata',       settings: merge({ perspective: true, shadows: true, autoEnhance: true, sharpen: 4, keystoneV: 6, rotFine: -2 }) },
+      { id: 'degeneri',        settings: merge({ perspective: true }), degenerate: true },
+      // Pixel trasparenti dopo il warp/keystone che attraversano ombre, enhance e nitidezza (spec 4.3)
+      { id: 'trasparenza-combinata', settings: merge({ perspective: false, keystoneV: 6, shadows: true, sharpen: 5, autoEnhance: true }) },
+      // Angoli oltre i bordi: il warp lascia alfa 0 ai lati
+      { id: 'fuori-cornice',   settings: merge({ perspective: true, shadows: true, sharpen: 4, autoEnhance: true, bw: true }), outside: true }
+    ];
+    var out = [];
+    imgNames.forEach(function (n) {
+      var spec = Synth.cases[n];
+      var made = Synth.make(spec);
+      configs.forEach(function (c) {
+        var corners = c.degenerate
+          ? { tl: { x: 50, y: 50 }, tr: { x: 50, y: 50 }, br: { x: 50, y: 50 }, bl: { x: 50, y: 50 } }
+          : JSON.parse(JSON.stringify(made.corners));
+        if (c.outside) { corners.tl.x = -8; corners.tr.x = 108; }
+        out.push({ name: n + ' / ' + c.id, image: spec, dataUrl: made.dataUrl, corners: corners, settings: c.settings });
+      });
+    });
+    return out;
+  }
+
+  function pageOf(c) {
+    return {
+      originalSrc: c.dataUrl,
+      corners: JSON.parse(JSON.stringify(c.corners)),
+      settings: JSON.parse(JSON.stringify(c.settings))
+    };
+  }
+
+  function countTransparent(im) {
+    var n = 0, d = im.data;
+    for (var i = 3; i < d.length; i += 4) if (d[i] === 0) n++;
+    return n;
+  }
+
+  function diffText(d, a, b) {
+    if (d.sizeMismatch) return 'dimensioni diverse: ' + a.width + 'x' + a.height + ' contro ' + b.width + 'x' + b.height;
+    return d.diffPixels + ' px diversi, maxDelta ' + d.maxDelta + ', ' + a.width + 'x' + a.height;
+  }
+
+  // Ref02.process usa stato condiviso: i casi vanno eseguiti uno alla volta.
+  async function identity(sf) {
+    var list = BENCH_CASES();
+    var hasIo = !!(sf && sf.io && typeof sf.io.createOps === 'function' && typeof sf.io.loadImage === 'function');
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      try {
+        var a = await withTimeout(Ref02.process(pageOf(c)), TIMEOUT_MS, c.name);
+        var b = await withTimeout(Ref02.process(pageOf(c)), TIMEOUT_MS, c.name);
+        var ia = Compare.canvasToImageData(a);
+        var d = Compare.diff(ia, Compare.canvasToImageData(b));
+        var size = a.width + 'x' + a.height;
+        var okRef = d.same === true && a.width > 0 && a.height > 0;
+        var detail = 'ref-vs-ref: ' + d.diffPixels + ' px diversi, maxDelta ' + d.maxDelta + ', ' + size +
+          ', alfa 0 nel riferimento: ' + countTransparent(ia);
+
+        var okNew = false, nuovo = '';
+        if (!hasIo) {
+          nuovo = 'ScanForge.io non disponibile';
+        } else {
+          try {
+            var img = await withTimeout(sf.io.loadImage(c.dataUrl, { maxDim: Infinity }), TIMEOUT_MS, c.name);
+            var page = pageOf(c);
+            var out = await withTimeout(
+              Promise.resolve(sf.process(img, { corners: page.corners, settings: page.settings }, sf.io.createOps())),
+              TIMEOUT_MS, c.name);
+            var dn = Compare.diff(ia, out);
+            okNew = dn.same === true;
+            nuovo = diffText(dn, ia, out);
+          } catch (e) {
+            nuovo = String(e && e.message || e);
+          }
+        }
+        // Colonna "app": la funzione processPage dell'interfaccia contro il riferimento 0.2
+        var okApp = false, appText = '';
+        var win = document.getElementById('app').contentWindow;
+        if (!win || typeof win.processPage !== 'function') {
+          appText = 'processPage non disponibile';
+        } else {
+          try {
+            var outApp = await withTimeout(win.processPage(pageOf(c)), TIMEOUT_MS, c.name);
+            var da = Compare.diff(ia, Compare.canvasToImageData(outApp));
+            okApp = da.same === true;
+            appText = diffText(da, ia, Compare.canvasToImageData(outApp));
+          } catch (e) {
+            appText = String(e && e.message || e);
+          }
+        }
+        record(c.name, okRef && okNew && okApp, detail, nuovo, appText);
+      } catch (e) {
+        record(c.name, false, String(e && e.message || e));
+      }
+    }
+  }
+
+  // Immagine piatta 100x80 a luminanza 100: nessuna zona chiara, il rilevamento deve dare null.
+  function uniform() {
+    var c = document.createElement('canvas');
+    c.width = 100; c.height = 80;
+    var x = c.getContext('2d');
+    x.fillStyle = 'rgb(100,100,100)';
+    x.fillRect(0, 0, 100, 80);
+    return { canvas: c, dataUrl: c.toDataURL('image/png') };
+  }
+
+  // Angoli: stessi numeri con ===, oppure entrambi null.
+  function sameCorners(a, b) {
+    if (a === null || b === null) return a === b;
+    return ['tl', 'tr', 'br', 'bl'].every(function (k) {
+      return a[k] && b[k] && a[k].x === b[k].x && a[k].y === b[k].y;
+    });
+  }
+
+  // Rilevazione dell'app: detectCorners(page) su una pagina di prova, senza toccare lo stato.
+  function appDetect(dataUrl) {
+    var win = document.getElementById('app').contentWindow;
+    if (!win || typeof win.detectCorners !== 'function') {
+      return Promise.reject(new Error('detectCorners non disponibile'));
+    }
+    var page = { originalSrc: dataUrl, name: 'prova', corners: null, settings: win.ScanForge.defaultSettings() };
+    return win.detectCorners(page);
+  }
+
+  function jpegUrlOf(made) { return made.canvas.toDataURL('image/jpeg', 0.9); }
+
+  // Rilevazione: 0.2 contro il core con loadImage a 400 px (come la 0.2) e contro l'app.
+  // Immagini grandi in PNG e JPEG: la riduzione deve dare gli stessi pixel della 0.2.
+  async function detection(sf) {
+    var hasIo = !!(sf && sf.io && typeof sf.io.createOps === 'function' && typeof sf.io.loadImage === 'function');
+    var list = [
+      { n: 'A-ombra' }, { n: 'B-scuro' }, { n: 'C-piccola' }, { n: 'D-wa' },
+      { n: 'G-media', fmt: 'jpeg' },
+      { n: 'E-grande', fmt: 'png' }, { n: 'E-grande', fmt: 'jpeg' },
+      { n: 'F-enorme', fmt: 'png' }, { n: 'F-enorme', fmt: 'jpeg' },
+      { n: 'uniforme' }
+    ];
+    for (var i = 0; i < list.length; i++) {
+      var it = list[i], n = it.n;
+      var name = n + (it.fmt ? ' ' + it.fmt : '') + ' / detect';
+      try {
+        var made = n === 'uniforme' ? uniform() : Synth.make(Synth.cases[n]);
+        var url = it.fmt === 'jpeg' ? jpegUrlOf(made) : made.dataUrl;
+        var ref = await withTimeout(Ref02.detect(url), TIMEOUT_MS, name);
+        if (!hasIo) {
+          record(name, false, '', 'ScanForge.io non disponibile');
+          continue;
+        }
+        var img = await withTimeout(sf.io.loadImage(url, { maxDim: 400 }), TIMEOUT_MS, name);
+        var res = sf.detectDocument(img, sf.io.createOps());
+        var got = res ? res.corners : undefined;
+        var ok = got !== undefined && sameCorners(ref, got);
+        var nuovo = ok ? (ref === null ? 'entrambi null' : 'angoli uguali')
+                       : 'diversi: 0.2 ' + JSON.stringify(ref) + ' nuovo ' + JSON.stringify(got);
+        var appCorners = await withTimeout(appDetect(url), TIMEOUT_MS, name);
+        var okApp = sameCorners(ref, appCorners);
+        var appText = okApp ? (ref === null ? 'entrambi null' : 'angoli uguali')
+                            : 'diversi: 0.2 ' + JSON.stringify(ref) + ' app ' + JSON.stringify(appCorners);
+        record(name, ok && okApp, 'rilevamento ' + made.canvas.width + 'x' + made.canvas.height, nuovo, appText);
+      } catch (e) {
+        record(name, false, 'rilevamento', String(e && e.message || e));
+      }
+    }
+  }
+
+  // ---- foto reali (facoltative) ----
+  // Se esiste dev/materiale/banco/ground-truth.json, ogni foto annotata si prova nell'originale
+  // e nella variante "WhatsApp". Le metriche sono informative; fallisce solo l'identità con la
+  // 0.2 o un errore di elaborazione. Senza il file la sezione dice "nessuna foto reale".
+  // Voci nella forma vecchia (un riquadro) o nuova (rotazione, più riquadri, passaporto con
+  // piega): vedi Metrics.parseEntry. La rilevazione trova un solo documento e si confronta
+  // con tutti i riquadri.
+  var GT_URL = '/dev/materiale/banco/ground-truth.json';
+  var FOTO_DIR = '/dev/materiale/banco/foto/';
+  var KIND = { cie: 'ID-1', patente: 'ID-1', ts: 'ID-1', passaporto: 'ID-3' };
+  var PRESET_NAMES = ['document', 'photo', 'id', 'receipt'];
+  var realItems = [];
+
+  function round(n, d) { var k = Math.pow(10, d); return Math.round(n * k) / k; }
+  function fmt(n, d) { return n === null || n === undefined ? '-' : String(round(n, d)); }
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+
+  function blobToCanvas(blob) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(blob), im = new Image();
+      im.onload = function () {
+        var c = document.createElement('canvas');
+        c.width = im.naturalWidth; c.height = im.naturalHeight;
+        c.getContext('2d').drawImage(im, 0, 0);
+        URL.revokeObjectURL(url);
+        resolve(c);
+      };
+      im.onerror = function () { URL.revokeObjectURL(url); reject(new Error('immagine non valida')); };
+      im.src = url;
+    });
+  }
+
+  function canvasToPngBlob(c) {
+    return new Promise(function (resolve, reject) {
+      c.toBlob(function (b) { b ? resolve(b) : reject(new Error('toBlob fallito')); }, 'image/png');
+    });
+  }
+
+  // entry: voce analizzata da Metrics.parseEntry; blob: la foto gia' ruotata come da rotazione.
+  // Il quadrilatero (esterno) del primo riquadro serve per tempi, peso del PDF e identita'
+  // con la 0.2, come prima per le voci a un solo riquadro.
+  async function measureVariant(sf, entry, blob) {
+    var ops = sf.io.createOps();
+    var url = URL.createObjectURL(blob);
+    var rq = entry.riquadri, first = rq[0];
+    var firstQuad = first.quad;
+    try {
+      var img = await withTimeout(sf.io.loadImage(blob, { maxDim: Infinity }), TIMEOUT_MS, entry.file);
+      var item = { file: entry.file, tipo: first.tipo, size: { w: img.width, h: img.height } };
+      item.rotazione = entry.rotazione;
+      item.riquadri = rq.length;
+      item.meta = rq.reduce(function (n, r) { return n + (r.meta ? 2 : 0); }, 0);   // metà di passaporti con piega
+      item.semplice = rq.length === 1 && !first.piega && !entry.rotazione;
+
+      // Rilevazione come la 0.2: l'immagine si decodifica già a 400 px (non si riduce da un canvas)
+      var t0 = performance.now();
+      var small = await withTimeout(sf.io.loadImage(blob, { maxDim: 400 }), TIMEOUT_MS, entry.file);
+      var det = sf.detectDocument(small, ops);
+      item.detectMs = round(performance.now() - t0, 1);
+      var found = det ? det.corners : null;
+      var refDet = await withTimeout(Ref02.detect(url), TIMEOUT_MS, entry.file);
+      item.detectIdentity = sameCorners(refDet, found);
+      item.detected = found;
+      // La rilevazione trova un solo documento: si confronta con tutti i riquadri (e le metà).
+      var m = Metrics.bestMatch(found, rq);
+      item.iou = m ? m.iou : null;
+      item.cornerError = m ? m.minCornerError : null;
+      item.match = m ? { riquadro: m.riquadro + 1, parte: m.parte, tipo: m.tipo } : null;
+      item.confronti = m ? m.all.map(function (c) {
+        return { riquadro: c.riquadro + 1, parte: c.parte, iou: round(c.iou, 4), cornerError: round(c.cornerError, 3) };
+      }) : null;
+
+      // Passo per passo con il preset "id" e gli angoli annotati: tempi, proporzioni e peso del PDF.
+      var stages = {};
+      var tp = performance.now();
+      var settingsId = merge(Ref02.PRESETS.id);
+      var outId = sf.process(img, {
+        corners: clone(firstQuad), settings: clone(settingsId),
+        onStage: function (name, ms) { stages[name] = round(ms, 1); }
+      }, ops);
+      item.stagesMs = stages;
+      item.processMs = round(performance.now() - tp, 1);
+
+      // Rapporto d'aspetto con gli angoli annotati, per ogni riquadro. Il passaporto con piega e'
+      // uno spread (176/125) e ognuna delle due meta' e' una pagina ID-3. Il motore attuale
+      // raddrizza lo spread con un'unica omografia: la misura dice quanto e' lontano dall'atteso.
+      item.aspect = [];
+      for (var ri = 0; ri < rq.length; ri++) {
+        // Il rapporto atteso di ogni metà è 125/88 e quello dello spread 176/125 con la piega
+        // verticale e con la orizzontale: aspectError ordina i lati. Con una piega non valida
+        // (lati non opposti) ci sono solo il contorno e lo spread.
+        var parts = rq[ri].piega
+          ? [{ parte: 'esterno', quad: rq[ri].quad, kind: 'PASS-SPREAD' }].concat(rq[ri].meta ? [
+             { parte: 'metà 1', quad: rq[ri].meta[0], kind: 'ID-3' },
+             { parte: 'metà 2', quad: rq[ri].meta[1], kind: 'ID-3' }] : [])
+          : [{ parte: 'riquadro', quad: rq[ri].quad, kind: KIND[rq[ri].tipo] }];
+        for (var pj = 0; pj < parts.length; pj++) {
+          var o = (ri === 0 && pj === 0) ? outId
+            : sf.process(img, { corners: clone(parts[pj].quad), settings: clone(settingsId) }, ops);
+          item.aspect.push({
+            riquadro: ri + 1, parte: parts[pj].parte, tipo: rq[ri].tipo, kind: parts[pj].kind,
+            err: Metrics.aspectError(o.width, o.height, parts[pj].kind)
+          });
+        }
+      }
+      item.aspectGt = item.aspect[0].err;
+      if (found) {
+        var kd = item.aspect.filter(function (a) { return a.riquadro === m.riquadro + 1 && a.parte === m.parte; })[0].kind;
+        var outDet = sf.process(img, { corners: found, settings: merge({ perspective: true }) }, ops);
+        item.aspectDet = Metrics.aspectError(outDet.width, outDet.height, kd);
+      } else {
+        item.aspectDet = null;
+      }
+      var jpg = await sf.io.encodeJpeg(outId);
+      item.jpegBytes = jpg.length;
+      item.pdfBytes = sf.io.buildPdf([{ bytes: jpg, width: outId.width, height: outId.height }]).length;
+
+      // Identita con la 0.2 sui quattro preset, con gli angoli annotati. Ref02 va uno alla volta.
+      item.identity = {};
+      for (var i = 0; i < PRESET_NAMES.length; i++) {
+        var pn = PRESET_NAMES[i], s = merge(Ref02.PRESETS[pn]);
+        var ref = await withTimeout(Ref02.process({
+          originalSrc: url, corners: clone(firstQuad), settings: clone(s)
+        }), TIMEOUT_MS, entry.file);
+        var nuovo = pn === 'id' ? outId
+          : sf.process(img, { corners: clone(firstQuad), settings: clone(s) }, ops);
+        item.identity[pn] = Compare.diff(Compare.canvasToImageData(ref), nuovo).same === true;
+      }
+      return item;
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  }
+
+  // Testo della colonna Rilevamento. Le voci a un solo riquadro e senza rotazione hanno il
+  // testo di sempre; le altre aggiungono riquadri, corrispondenza migliore e IoU per parte.
+  function detectText(item) {
+    var ms = fmt(item.detectMs, 0) + ' ms';
+    var t = item.detected
+      ? 'IoU ' + fmt(item.iou, 3) + ', errore angoli ' + fmt(item.cornerError, 2) + ', ' + ms
+      : 'non rilevato, ' + ms;
+    if (item.semplice) return t;
+    var extra = ['riquadri ' + item.riquadri + (item.meta ? ' (passaporto con piega: ' + item.meta + ' metà)' : '')];
+    if (item.rotazione) extra.push('rotazione ' + item.rotazione + '°');
+    if (item.match) {
+      extra.push('migliore: riquadro ' + item.match.riquadro + ' ' + item.match.tipo +
+        (item.match.parte === 'riquadro' ? '' : ', ' + item.match.parte));
+      extra.push('IoU per parte: ' + item.confronti.map(function (c) {
+        return 'r' + c.riquadro + (c.parte === 'riquadro' ? '' : ' ' + c.parte) + ' ' + fmt(c.iou, 3);
+      }).join(', '));
+    }
+    return t + ' [' + extra.join('; ') + ']';
+  }
+
+  function aspectText(item) {
+    if (item.semplice) {
+      return 'con angoli annotati ' + fmt(item.aspectGt, 4) + ', con rilevati ' + fmt(item.aspectDet, 4);
+    }
+    return 'con angoli annotati ' + item.aspect.map(function (a) {
+      return 'r' + a.riquadro + ' ' + a.tipo + (a.parte === 'riquadro' ? '' : ' ' + a.parte) + ' ' + fmt(a.err, 4);
+    }).join(', ') + ', con rilevati ' + fmt(item.aspectDet, 4);
+  }
+
+  // Aggiunge la riga alla tabella delle foto reali. Con err la riga è di errore.
+  function addRealRow(item, label, err) {
+    var table = document.getElementById('real');
+    table.hidden = false;
+    var tr = document.createElement('tr');
+    var ok = !err && item.detectIdentity === true && PRESET_NAMES.every(function (p) { return item.identity[p]; });
+    var cells = err ? [label, 'KO', err, '', '', '', ''] : [
+      label, ok ? 'OK' : 'KO',
+      detectText(item),
+      aspectText(item),
+      Object.keys(item.stagesMs).map(function (k) { return k + ' ' + item.stagesMs[k]; }).join(', '),
+      'JPEG ' + item.jpegBytes + ', PDF ' + item.pdfBytes,
+      'rilevamento ' + (item.detectIdentity ? 'ok' : 'DIVERSO') + ', ' +
+        PRESET_NAMES.map(function (p) { return p + (item.identity[p] ? ' ok' : ' DIVERSO'); }).join(', ')
+    ];
+    cells.forEach(function (txt, i) {
+      var td = document.createElement('td');
+      td.textContent = txt;
+      if (i === 1) td.className = txt === 'OK' ? 'pass' : 'fail';
+      tr.appendChild(td);
+    });
+    table.querySelector('tbody').appendChild(tr);
+    return ok;
+  }
+
+  function stamp() {
+    var d = new Date();
+    function p(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
+  }
+
+  async function realPhotos(sf) {
+    var note = document.getElementById('real-note');
+    var none = 'nessuna foto reale';
+    var res;
+    try {
+      res = await withTimeout(fetch(GT_URL, { cache: 'no-store' }), 15000, 'ground-truth');
+    } catch (e) { note.textContent = none; return; }   // senza server il file non c'è: non è un errore
+    if (res.status !== 200) { note.textContent = none; return; }
+    var gt;
+    try { gt = await res.json(); } catch (e) {
+      note.textContent = 'ground-truth.json non è un JSON valido';
+      record('foto reali / ground-truth', false, 'JSON non valido');
+      return;
+    }
+    if (!Array.isArray(gt)) {
+      note.textContent = 'ground-truth.json non è una lista';
+      record('foto reali / ground-truth', false, 'non è una lista');
+      return;
+    }
+    if (!gt.length) { note.textContent = none; return; }
+    note.textContent = gt.length + ' foto annotate: ogni foto si prova nell\'originale e nella variante WhatsApp.';
+
+    for (var i = 0; i < gt.length; i++) {
+      var e = gt[i], parsed = Metrics.parseEntry(e), bad = parsed.error;
+      var label = (e && typeof e.file === 'string' && e.file) || ('voce ' + i);
+      if (bad) { record('foto reale ' + label, false, bad); addRealRow(null, label, bad); continue; }
+      var blob;
+      try {
+        var r = await withTimeout(fetch(FOTO_DIR + encodeURIComponent(e.file), { cache: 'no-store' }), 30000, e.file);
+        if (r.status !== 200) throw new Error('foto assente in dev/materiale/banco/foto/ (HTTP ' + r.status + ')');
+        blob = await r.blob();
+      } catch (err) {
+        record('foto reale ' + e.file, false, String(err && err.message || err));
+        addRealRow(null, e.file, String(err && err.message || err));
+        continue;
+      }
+      // La rotazione si applica prima di tutto: rilevazione, warp e metriche usano la foto ruotata.
+      var baseCanvas = null;
+      if (parsed.rotazione) {
+        try {
+          var raw = await blobToCanvas(blob);
+          baseCanvas = Rotate.canvas(raw, raw.width, raw.height, parsed.rotazione);
+          blob = await canvasToPngBlob(baseCanvas);
+        } catch (err) {
+          record('foto reale ' + e.file, false, 'rotazione non riuscita: ' + String(err && err.message || err));
+          addRealRow(null, e.file, 'rotazione non riuscita: ' + String(err && err.message || err));
+          continue;
+        }
+      }
+      var variants = [{ name: 'originale', blob: blob }];
+      try {
+        var wa = await Whatsapp.degrade(baseCanvas || await blobToCanvas(blob));
+        variants.push({ name: 'whatsapp', blob: await canvasToPngBlob(wa) });
+      } catch (err) {
+        record('foto reale ' + e.file + ' / whatsapp', false, 'variante non creata: ' + String(err && err.message || err));
+        addRealRow(null, e.file + ' / whatsapp', String(err && err.message || err));
+      }
+      for (var v = 0; v < variants.length; v++) {
+        var name = e.file + ' / ' + variants[v].name;
+        try {
+          var item = await measureVariant(sf, parsed, variants[v].blob);
+          item.variante = variants[v].name;
+          realItems.push(item);
+          var ok = addRealRow(item, name);
+          record('foto reale ' + name, ok, 'metriche nella sezione foto reali',
+                 'rilevamento ' + (item.detectIdentity ? 'ok' : 'diverso') + ', ' +
+                 PRESET_NAMES.map(function (p) { return p + (item.identity[p] ? ' ok' : ' diverso'); }).join(', '));
+        } catch (err) {
+          record('foto reale ' + name, false, String(err && err.message || err));
+          addRealRow(null, name, String(err && err.message || err));
+        }
+      }
+    }
+
+    if (realItems.length) {
+      var fileName = stamp() + '.json';
+      try {
+        var save = await withTimeout(fetch('/save-result?name=' + encodeURIComponent(fileName), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ date: new Date().toISOString(), version: sf.version, items: realItems })
+        }), 30000, 'save-result');
+        if (!save.ok) throw new Error('HTTP ' + save.status);
+        note.textContent += ' Risultati salvati in dev/materiale/banco/risultati/' + fileName + '.';
+      } catch (err) {
+        record('foto reali / salvataggio dei risultati', false, String(err && err.message || err));
+      }
+    }
+  }
+
+  function render() {
+    var pass = cases.filter(function (r) { return r.ok; }).length;
+    var fail = cases.length - pass;
+    var tbody = document.querySelector('#results tbody');
+    cases.forEach(function (r) {
+      var tr = document.createElement('tr');
+      [r.name, r.ok ? 'OK' : 'KO', r.detail, r.nuovo, r.app].forEach(function (txt, i) {
+        var td = document.createElement('td');
+        td.textContent = txt;
+        if (i === 1) td.className = r.ok ? 'pass' : 'fail';
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    document.getElementById('summary').textContent = 'Passati: ' + pass + ' - Falliti: ' + fail;
+    window.__bench = { summary: { pass: pass, fail: fail }, cases: cases,
+      real: { note: document.getElementById('real-note').textContent, items: realItems } };
+    var fine = document.createElement('p');
+    fine.textContent = 'FINE';
+    document.body.appendChild(fine);
+  }
+
+  async function run() {
+    try {
+      selfcheck();
+      var sf = await appReady();
+      await identity(sf);
+      await detection(sf);
+      await realPhotos(sf);
+    } catch (e) {
+      record('errore del banco', false, String(e && e.message || e));
+    } finally {
+      render();
+    }
+  }
+
+  run();
+})();
+</script>
+</body>
+</html>

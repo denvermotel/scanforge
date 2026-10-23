@@ -1,0 +1,1564 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<title>ScanForge - test di contratto API</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 24px; color: #222; }
+  table { border-collapse: collapse; margin-top: 12px; }
+  td, th { border: 1px solid #ccc; padding: 4px 10px; text-align: left; }
+  .pass { color: #0a7a2f; }
+  .fail { color: #b00020; font-weight: 600; }
+  #summary { font-weight: 600; }
+  iframe { position: absolute; left: -9999px; width: 800px; height: 600px; border: 0; }
+</style>
+</head>
+<body>
+<h1>Contratto pubblico API</h1>
+<p id="summary">In corso...</p>
+<table id="results"><thead><tr><th>Test</th><th>Esito</th><th>Dettaglio</th></tr></thead><tbody></tbody></table>
+<iframe id="app" src="../index.html" title="app"></iframe>
+<script src="lib/api-manifest.js"></script>
+<script src="lib/synth.js"></script>
+<script src="lib/whatsapp.js"></script>
+<script src="reference/ref02.js"></script>
+<script>
+(function () {
+  var rows = [];
+  var failures = [];
+  var warnings = [];
+
+  // Percorso a punti ("io.loadImage") risolto sull'oggetto ScanForge dell'iframe.
+  function resolve(root, path) {
+    return path.split('.').reduce(function (o, k) { return o == null ? undefined : o[k]; }, root);
+  }
+
+  function check(name, fn) {
+    var ok = false, detail = '';
+    try {
+      var r = fn();
+      ok = r === true;
+      if (!ok) detail = String(r);
+    } catch (e) {
+      detail = String(e && e.message || e);
+    }
+    rows.push({ name: name, ok: ok, detail: detail });
+    if (!ok) failures.push(name + (detail ? ' - ' + detail : ''));
+  }
+
+  // Verifica asincrona: la riga si riserva subito (ordine stabile) e si completa a promessa risolta.
+  var pending = [];
+  function checkAsync(name, fn) {
+    var row = { name: name, ok: false, detail: '' };
+    rows.push(row);
+    pending.push(Promise.resolve().then(fn).then(function (r) {
+      row.ok = r === true;
+      if (!row.ok) row.detail = String(r);
+    }, function (e) {
+      row.detail = String(e && e.message || e);
+    }).then(function () {
+      if (!row.ok) failures.push(name + (row.detail ? ' - ' + row.detail : ''));
+    }));
+  }
+
+  function sameBytes(a, b) {
+    if (a.length !== b.length) return 'lunghezza ' + a.length + ' contro ' + b.length;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return 'byte diverso alla posizione ' + i;
+    return true;
+  }
+
+  // Sezione io: PDF, progetti, nome file. Il riferimento e Ref02 (la 0.2 alla lettera).
+  function ioTests(sf, win) {
+    var io = sf && sf.io;
+    function jpeg(n) { var b = new Uint8Array(n); b[0] = 0xFF; b[1] = 0xD8; b[n - 1] = 0xD9; return b; }
+    function pdfPages() {
+      return [
+        { bytes: jpeg(10), width: 100, height: 50 },
+        { bytes: jpeg(10), width: 100, height: 50, ptW: 595.28, ptH: 841.89 }
+      ];
+    }
+    function projState() {
+      return {
+        projectName: 'Pratica Rossi',
+        a4Compose: true,
+        pages: [
+          { originalSrc: 'data:image/jpeg;base64,AAAA', name: 'a.jpg', settings: Ref02.defaultSettings(), corners: Ref02.defaultCorners(), width: 10, height: 20, docGroup: 1, docSide: 'fronte', id: 5 },
+          { originalSrc: 'data:image/jpeg;base64,BBBB', name: 'b.jpg', settings: Ref02.defaultSettings(), corners: Ref02.defaultCorners(), width: 30, height: 40, docGroup: null, docSide: 'retro' }
+        ]
+      };
+    }
+
+    checkAsync('io.buildPdf ha gli stessi byte di Ref02.buildPdf', function () {
+      return Ref02.buildPdf(pdfPages()).arrayBuffer().then(function (ab) {
+        var mine = io.buildPdf(pdfPages());
+        if (!(mine instanceof win.Uint8Array)) return 'non restituisce Uint8Array';
+        return sameBytes(mine, new Uint8Array(ab));
+      });
+    });
+    check('io.serializeProject uguale a Ref02.serializeProject', function () {
+      var a = io.serializeProject(projState()), b = Ref02.serializeProject(projState());
+      return a === b ? true : 'stringhe diverse: ' + a.slice(0, 80) + ' / ' + b.slice(0, 80);
+    });
+    check('io.parseProject su un progetto 0.2 completa le impostazioni', function () {
+      var st = projState();
+      st.pages[0].settings = { contrast: 12, brightness: 3, sharpen: 1, bw: true, autoEnhance: false, shadows: false, perspective: true };
+      delete st.pages[1].corners; delete st.pages[1].docSide; delete st.pages[1].name;
+      var p = io.parseProject(Ref02.serializeProject(st));
+      var s0 = p.pages[0].settings, def = sf.defaultSettings();
+      if (p.projectName !== 'Pratica Rossi' || p.a4Compose !== true || p.pages.length !== 2) return 'testata errata';
+      if (s0.keystoneV !== 0 || s0.keystoneH !== 0 || s0.rotFine !== 0) return 'campi nuovi mancanti';
+      if (s0.contrast !== 12 || s0.bw !== true) return 'valori del progetto persi';
+      if (Object.keys(def).some(function (k) { return !(k in s0); })) return 'impostazioni incomplete';
+      var q = p.pages[1];
+      if (q.docSide !== 'fronte' || q.name !== 'pagina') return 'predefiniti di pagina errati';
+      if (JSON.stringify(q.corners) !== JSON.stringify(Ref02.defaultCorners())) return 'angoli predefiniti errati';
+      if (q.docGroup !== null || q.originalSrc !== 'data:image/jpeg;base64,BBBB') return 'pagina errata';
+      return true;
+    });
+    check('io: flipH, flipV e bilanciaBianco si salvano e si rileggono come booleani', function () {
+      var st = projState();
+      st.pages[0].settings = Object.assign({}, st.pages[0].settings, { flipH: true, flipV: false, bilanciaBianco: false });
+      var s0 = io.parseProject(io.serializeProject(st)).pages[0].settings;
+      return s0.flipH === true && s0.flipV === false && s0.bilanciaBianco === false ? true : JSON.stringify(s0);
+    });
+    ['flipH', 'flipV', 'bilanciaBianco'].forEach(function (k) {
+      check('io: ' + k + ' non booleano è bad-input', function () {
+        var st = {};
+        st[k] = 'si';
+        try { io.checkSettings(st, 'Impostazioni'); } catch (e) { return e && e.code === 'bad-input' ? true : 'codice ' + (e && e.code); }
+        return 'non ha rifiutato';
+      });
+    });
+    ['{', '{"pages":3}', 'null', '[]'].forEach(function (txt) {
+      check('io.parseProject rifiuta ' + txt + ' con bad-input', function () {
+        try { io.parseProject(txt); } catch (e) { return e && e.code === 'bad-input' ? true : 'codice ' + (e && e.code); }
+        return 'non ha rifiutato';
+      });
+    });
+    // ---- Allegato PDF e progetto con pratica ----
+    var NOME_ALL = 'scanforge-progetto.json';
+    function asciiAll(b) { var s = ''; for (var i = 0; i < b.length; i++) s += String.fromCharCode(b[i]); return s; }
+    check('io.buildPdf con allegato: xref coerente e allegato leggibile', function () {
+      var bytes = new win.TextEncoder().encode('{"a":1,"b":"è"}');
+      var pdf = io.buildPdf(pdfPages(), { attachment: { name: NOME_ALL, bytes: bytes } });
+      if (asciiAll(pdf.subarray(0, 8)) !== '%PDF-1.4') return 'intestazione errata';
+      var s = asciiAll(pdf);
+      var sx = /startxref\n(\d+)\n%%EOF$/.exec(s);
+      if (!sx) return 'startxref mancante';
+      var x = Number(sx[1]);
+      var m = /^xref\n0 (\d+)\n/.exec(s.slice(x));
+      if (!m) return 'xref non trovato';
+      var tot = Number(m[1]);
+      if (tot !== 3 + 2 * 3 + 2) return 'oggetti ' + tot;
+      if (s.indexOf('/Size ' + tot + ' ') < 0) return 'Size errata';
+      var righe = s.slice(x + m[0].length).split('\n');
+      for (var i = 1; i < tot; i++) {
+        var off = Number(righe[i + 0].slice(0, 10));
+        if (s.slice(off, off + (i + ' 0 obj').length) !== i + ' 0 obj') return 'offset errato per ' + i;
+      }
+      var r = sf.model.readPdfAttachment(pdf);
+      if (!r) return 'allegato non letto';
+      return sameBytes(r, bytes);
+    });
+    check('io.buildPdf rifiuta un nome di allegato diverso', function () {
+      try { io.buildPdf(pdfPages(), { attachment: { name: 'altro.json', bytes: new Uint8Array(1) } }); }
+      catch (e) { return e instanceof win.TypeError || e instanceof TypeError ? true : 'tipo errore ' + e; }
+      return 'non ha rifiutato';
+    });
+    check('io.buildPdf con opts vuote ha i byte di sempre', function () {
+      return sameBytes(io.buildPdf(pdfPages(), {}), io.buildPdf(pdfPages()));
+    });
+    function praticaProva() {
+      return {
+        cognome: 'Rossi', nome: 'Mario',
+        documents: [
+          { id: 'd1', typeId: 'cie', mode: 'grigi', pageIds: ['A', 'B'] },
+          { id: 'd2', typeId: 'contratto', mode: null, pageIds: ['C'] }
+        ],
+        unassigned: ['D']
+      };
+    }
+    function statoPratica() {
+      var st = projState();
+      var mk = function (id, n) { return { originalSrc: 'data:image/jpeg;base64,' + n, name: n + '.jpg', settings: Ref02.defaultSettings(), corners: Ref02.defaultCorners(), width: 10, height: 10, docGroup: null, docSide: 'fronte', id: id }; };
+      st.pages = [mk('A', 'AAAA'), mk('B', 'BBBB'), mk('C', 'CCCC'), mk('D', 'DDDD')];
+      st.practice = praticaProva();
+      return st;
+    }
+    check('io.serializeProject con pratica ricava docGroup e docSide', function () {
+      var d = JSON.parse(io.serializeProject(statoPratica()));
+      if (!d.practice || d.practice.cognome !== 'Rossi' || d.practice.nome !== 'Mario') return 'pratica assente';
+      if (d.pages.some(function (p) { return 'id' in p; })) return 'id scritto nelle pagine';
+      if (JSON.stringify(d.practice.documents[0].pageIds) !== '["p0","p1"]') return 'pageIds non rimappati';
+      if (JSON.stringify(d.practice.unassigned) !== '["p3"]') return 'unassigned errato';
+      var g = d.pages;
+      if (g[0].docGroup === null || g[0].docGroup !== g[1].docGroup) return 'tessera non raggruppata';
+      if (g[0].docSide !== 'fronte' || g[1].docSide !== 'retro') return 'lati errati';
+      if (g[2].docGroup !== null || g[2].docSide !== 'fronte') return 'foglio errato';
+      return true;
+    });
+    check('io.serializeProject: pratica a pagine non referenziate le mette in unassigned', function () {
+      var st = statoPratica(); st.practice.unassigned = [];
+      var d = JSON.parse(io.serializeProject(st));
+      return JSON.stringify(d.practice.unassigned) === '["p3"]' ? true : JSON.stringify(d.practice.unassigned);
+    });
+    check('io.serializeProject rifiuta una pratica con pageId inesistente', function () {
+      var st = statoPratica(); st.practice.documents[1].pageIds = ['Z'];
+      try { io.serializeProject(st); } catch (e) { return e && e.code === 'bad-input' ? true : 'codice ' + (e && e.code); }
+      return 'non ha rifiutato';
+    });
+    [
+      ['tessera di 3 pagine', function (st) { st.practice.documents[0].pageIds = ['A', 'B', 'D']; st.practice.unassigned = []; }],
+      ['pageId in due documenti', function (st) { st.practice.documents[1].pageIds = ['A']; }],
+      ['id documento duplicato', function (st) { st.practice.documents[1].id = 'd1'; }],
+      ['due pagine con lo stesso id', function (st) { st.pages[3].id = 'A'; st.practice.unassigned = []; }]
+    ].forEach(function (c) {
+      check('io.serializeProject rifiuta una pratica con ' + c[0], function () {
+        var st = statoPratica(); c[1](st);
+        try { io.serializeProject(st); } catch (e) { return e && e.code === 'bad-input' ? true : 'codice ' + (e && e.code); }
+        return 'non ha rifiutato';
+      });
+    });
+    check('una pratica valida fa andata e ritorno identica', function () {
+      var t = io.serializeProject(statoPratica());
+      var t2 = io.serializeProject(io.parseProject(t));
+      return t === t2 ? true : 'testi diversi';
+    });
+    check('andata e ritorno della pratica: serializeProject e parseProject', function () {
+      var p = io.parseProject(io.serializeProject(statoPratica()));
+      var attesa = { title: '', cognome: 'Rossi', nome: 'Mario', documents: [
+        { id: 'd1', typeId: 'cie', mode: 'grigi', pageIds: ['p0', 'p1'] },
+        { id: 'd2', typeId: 'contratto', mode: null, pageIds: ['p2'] }
+      ], unassigned: ['p3'] };
+      if (JSON.stringify(p.practice) !== JSON.stringify(attesa)) return JSON.stringify(p.practice);
+      if (p.pages.map(function (x) { return x.id; }).join() !== 'p0,p1,p2,p3') return 'id pagine errati';
+      return true;
+    });
+    // Nome del progetto: practice.title facoltativo ('' = automatico)
+    check('practice.title: andata e ritorno del nome scritto', function () {
+      var st = statoPratica(); st.practice.title = 'Contratto Casa Milano';
+      var t = io.serializeProject(st);
+      if (JSON.parse(t).practice.title !== 'Contratto Casa Milano') return 'non scritto';
+      var p = io.parseProject(t);
+      if (p.practice.title !== 'Contratto Casa Milano') return 'riletto: ' + p.practice.title;
+      return io.serializeProject(p) === t ? true : 'secondo giro diverso';
+    });
+    check('practice.title assente o vuoto: non si scrive e si legge come vuoto', function () {
+      var d1 = JSON.parse(io.serializeProject(statoPratica()));
+      var st = statoPratica(); st.practice.title = '   ';
+      var d2 = JSON.parse(io.serializeProject(st));
+      if ('title' in d1.practice || 'title' in d2.practice) return 'scritto';
+      return io.parseProject(JSON.stringify(d1)).practice.title === '' ? true : 'letto non vuoto';
+    });
+    check('practice.title troppo lungo si accorcia a 80 e si pulisce dagli spazi', function () {
+      var d = JSON.parse(io.serializeProject(statoPratica()));
+      d.practice.title = 'x'.repeat(200);
+      var lungo = io.parseProject(JSON.stringify(d)).practice.title;
+      if (lungo.length !== 80) return 'lunghezza ' + lungo.length;
+      d.practice.title = '  Casa  ';
+      var spazi = io.parseProject(JSON.stringify(d)).practice.title;
+      return spazi === 'Casa' ? true : JSON.stringify(spazi);
+    });
+    check('io.parseProject rifiuta practice.title che non è una stringa', function () {
+      var d = JSON.parse(io.serializeProject(statoPratica()));
+      d.practice.title = 5;
+      try { io.parseProject(JSON.stringify(d)); } catch (e) { return e && e.code === 'bad-input' ? true : 'codice ' + (e && e.code); }
+      return 'non ha rifiutato';
+    });
+    check('io.parseProject di un progetto 0.2 dà la pratica di fromLegacy', function () {
+      var p = io.parseProject(Ref02.serializeProject(projState()));
+      var att = sf.model.fromLegacy(p.pages);
+      if (JSON.stringify(p.practice) !== JSON.stringify(att)) return JSON.stringify(p.practice);
+      return p.pages[0].id === 'p0' ? true : 'id errato';
+    });
+    check('io.parseProject di un progetto 0.2 con A4 spento ignora docGroup', function () {
+      var st = projState();
+      st.a4Compose = false;
+      st.pages = [1, 1, 2, 2].map(function (g, i) {
+        return { originalSrc: 'data:image/jpeg;base64,AAAA', name: 'p' + i + '.jpg', settings: Ref02.defaultSettings(),
+          corners: Ref02.defaultCorners(), width: 10, height: 10, docGroup: g, docSide: i % 2 ? 'retro' : 'fronte' };
+      });
+      var p = io.parseProject(Ref02.serializeProject(st));
+      var docs = p.practice.documents;
+      if (docs.length !== 1 || docs[0].typeId !== 'generico' || docs[0].pageIds.join() !== 'p0,p1,p2,p3') return JSON.stringify(docs);
+      var plan = sf.model.exportPlan(p.practice, sf.model.TYPES, false);
+      var a4 = plan[0].items.map(function (x) { return x.a4; });
+      return a4.length === 4 && a4.every(function (x) { return x === false; }) ? true : JSON.stringify(a4);
+    });
+    function conPratica(mod) {
+      var d = JSON.parse(io.serializeProject(statoPratica()));
+      mod(d.practice);
+      return JSON.stringify(d);
+    }
+    [
+      ['pageId inesistente', function (p) { p.documents[1].pageIds = ['p9']; }],
+      ['tessera di 3 pagine', function (p) { p.documents[0].pageIds = ['p0', 'p1', 'p3']; p.unassigned = []; }],
+      ['pageId doppio', function (p) { p.documents[1].pageIds = ['p0']; }],
+      ['modo sconosciuto', function (p) { p.documents[0].mode = 'rosa'; }],
+      ['documents non array', function (p) { p.documents = 3; }],
+      ['typeId non stringa', function (p) { p.documents[0].typeId = 7; }],
+      ['cognome non stringa', function (p) { p.cognome = 5; }],
+      ['unassigned non array', function (p) { p.unassigned = 'p3'; }]
+    ].forEach(function (c) {
+      check('io.parseProject rifiuta una pratica con ' + c[0], function () {
+        try { io.parseProject(conPratica(c[1])); } catch (e) { return e && e.code === 'bad-input' && e.message === 'File progetto non valido' ? true : 'errore ' + (e && e.code); }
+        return 'non ha rifiutato';
+      });
+    });
+    check('io.parseProject: pagine fuori dalla pratica vanno in unassigned', function () {
+      var t = conPratica(function (p) { p.unassigned = []; });
+      var p = io.parseProject(t);
+      return JSON.stringify(p.practice.unassigned) === '["p3"]' ? true : JSON.stringify(p.practice.unassigned);
+    });
+    check('io.parseProject: tipo sconosciuto è un foglio, anche con 3 pagine', function () {
+      var t = conPratica(function (p) { p.documents[1].typeId = 'xyz'; p.documents[1].pageIds = ['p2', 'p3', 'p1']; p.documents[0].pageIds = ['p0']; p.unassigned = []; });
+      return io.parseProject(t).practice.documents[1].pageIds.length === 3 ? true : 'rifiutato';
+    });
+    // Tipi propri: la definizione viaggia nella pratica (practice.types)
+    var TIPI_PROPRI = [
+      { id: 'proprio1', label: 'Tesserino', sigla: 'Tes', family: 'tessera' },
+      { id: 'proprio2', label: 'Delega', sigla: 'Del', family: 'foglio' },
+      { id: 'proprio3', label: 'Mai usato', sigla: 'Mu', family: 'foglio' }
+    ];
+    function statoTipiPropri() {
+      var st = statoPratica();
+      st.practice.documents = [
+        { id: 'd1', typeId: 'proprio1', mode: null, pageIds: ['A', 'B'] },
+        { id: 'd2', typeId: 'proprio2', mode: null, pageIds: ['C', 'D'] }
+      ];
+      st.practice.unassigned = [];
+      st.types = sf.model.TYPES.concat(TIPI_PROPRI);
+      return st;
+    }
+    check('tipi propri: andata e ritorno con definizioni, docGroup e docSide', function () {
+      var t = io.serializeProject(statoTipiPropri());
+      var d = JSON.parse(t);
+      var attesi = JSON.stringify(TIPI_PROPRI.slice(0, 2));
+      if (JSON.stringify(d.practice.types) !== attesi) return 'tipi scritti: ' + JSON.stringify(d.practice.types);
+      var g = d.pages;
+      if (g[0].docGroup === null || g[0].docGroup !== g[1].docGroup) return 'tessera propria non raggruppata';
+      if (g[0].docSide !== 'fronte' || g[1].docSide !== 'retro') return 'lati della tessera propria errati';
+      if (g[2].docGroup !== null || g[3].docGroup !== null) return 'foglio proprio raggruppato';
+      var p = io.parseProject(t);
+      if (JSON.stringify(p.practice.types) !== attesi) return 'tipi riletti: ' + JSON.stringify(p.practice.types);
+      return io.serializeProject(Object.assign(p, { types: sf.model.TYPES.concat(p.practice.types) })) === t ? true : 'secondo giro diverso';
+    });
+    check('tipi predefiniti mai scritti in practice.types', function () {
+      var d = JSON.parse(io.serializeProject(Object.assign(statoPratica(), { types: sf.model.TYPES.concat(TIPI_PROPRI) })));
+      return d.practice.types === undefined ? true : JSON.stringify(d.practice.types);
+    });
+    function conTipi(mod) {
+      var d = JSON.parse(io.serializeProject(statoTipiPropri()));
+      mod(d.practice);
+      return JSON.stringify(d);
+    }
+    [
+      ['types non array', function (p) { p.types = {}; }],
+      ['id predefinito', function (p) { p.types[0].id = 'cie'; p.documents[0].typeId = 'cie'; }],
+      ['id doppio', function (p) { p.types[1].id = 'proprio1'; }],
+      ['nome vuoto', function (p) { p.types[0].label = '  '; }],
+      ['nome di 61 caratteri', function (p) { p.types[0].label = new Array(62).join('a'); }],
+      ['sigla vuota dopo la pulizia', function (p) { p.types[0].sigla = ' . '; }],
+      ['sigla di 21 caratteri', function (p) { p.types[0].sigla = new Array(22).join('s'); }],
+      ['famiglia sconosciuta', function (p) { p.types[0].family = 'busta'; }],
+      ['tipo non usato da nessun documento', function (p) { p.types.push({ id: 'proprio7', label: 'Avanzo', sigla: 'Av', family: 'foglio' }); }],
+      ['tessera propria di 3 pagine', function (p) { p.documents[0].pageIds = ['p0', 'p1', 'p2']; p.documents[1].pageIds = ['p3']; }]
+    ].forEach(function (c) {
+      check('io.parseProject rifiuta practice.types con ' + c[0], function () {
+        try { io.parseProject(conTipi(c[1])); } catch (e) { return e && e.code === 'bad-input' ? true : 'errore ' + (e && e.code); }
+        return 'non ha rifiutato';
+      });
+    });
+    check('io.serializeProject rifiuta una tessera propria di 3 pagine', function () {
+      var st = statoTipiPropri(); st.practice.documents[0].pageIds = ['A', 'B', 'C']; st.practice.documents[1].pageIds = ['D'];
+      try { io.serializeProject(st); } catch (e) { return e && e.code === 'bad-input' ? true : 'codice ' + (e && e.code); }
+      return 'non ha rifiutato';
+    });
+    check('practice.types con 5000 tipi non usati rifiutata in meno di 200 ms', function () {
+      var t = conTipi(function (p) {
+        p.types = [];
+        for (var i = 0; i < 5000; i++) p.types.push({ id: 'x' + i, label: 'Tipo ' + i, sigla: 'T' + i, family: 'foglio' });
+      });
+      var t0 = win.performance.now(), codice = null;
+      try { io.parseProject(t); } catch (e) { codice = e && e.code; }
+      var ms = win.performance.now() - t0;
+      if (codice !== 'bad-input') return 'codice ' + codice;
+      return ms < 200 ? true : 'lento: ' + Math.round(ms) + ' ms';
+    });
+    check('practice.types: sigla con spazi e punti finali pulita come nelle Impostazioni', function () {
+      var p = io.parseProject(conTipi(function (p) { p.types[0].sigla = ' Tes. . '; }));
+      return p.practice.types[0].sigla === 'Tes' ? true : JSON.stringify(p.practice.types[0].sigla);
+    });
+    check('practice.types: sigla pulita come un nome di file', function () {
+      var p = io.parseProject(conTipi(function (p) { p.types[0].sigla = 'T/s:'; }));
+      return p.practice.types[0].sigla === 'T-s-' ? true : p.practice.types[0].sigla;
+    });
+    check('io.projectFromPdf restituisce il testo dell\'allegato o null', function () {
+      var testo = '{"x":"èà"}';
+      var pdf = io.buildPdf(pdfPages(), { attachment: { name: NOME_ALL, bytes: new win.TextEncoder().encode(testo) } });
+      if (io.projectFromPdf(pdf) !== testo) return 'testo diverso';
+      if (io.projectFromPdf(io.buildPdf(pdfPages())) !== null) return 'atteso null senza allegato';
+      if (io.projectFromPdf(new Uint8Array(0)) !== null || io.projectFromPdf(null) !== null || io.projectFromPdf('x') !== null) return 'atteso null su input errati';
+      return true;
+    });
+    check('io.slugify', function () {
+      var r = io.slugify('Città Nuova  Ré');
+      return r === 'citta-nuova-re' ? true : r;
+    });
+    check('io.slugify di un nome vuoto', function () { return io.slugify('  ') === '' ? true : 'non vuoto'; });
+    check('io.fileName senza nome usa data e ora', function () {
+      var r = io.fileName('', 'pdf', new Date(Date.UTC(2026, 9, 2, 10, 5)));
+      return (r.indexOf('scanforge-2026-10-02-') === 0 && /\.pdf$/.test(r)) ? true : r;
+    });
+    check('io.fileName con nome', function () {
+      var r = io.fileName('Mario Rossi', 'jpg');
+      return r === 'mario-rossi.jpg' ? true : r;
+    });
+    function smallImg() {
+      var d = new Uint8ClampedArray(4 * 4 * 4);
+      for (var i = 0; i < d.length; i++) d[i] = i % 4 === 3 ? 255 : (i * 7) % 256;
+      return { data: d, width: 4, height: 4 };
+    }
+    checkAsync('io.encodeJpeg inizia con FF D8', function () {
+      return io.encodeJpeg(smallImg()).then(function (b) {
+        return (b[0] === 0xFF && b[1] === 0xD8) ? true : 'byte ' + b[0] + ',' + b[1];
+      });
+    });
+    checkAsync('io.encodePng inizia con 89 50 4E 47', function () {
+      return io.encodePng(smallImg()).then(function (b) {
+        return (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4E && b[3] === 0x47) ? true : 'byte ' + b[0] + ',' + b[1];
+      });
+    });
+    function colored(w, h, col) {
+      var c = document.createElement('canvas'); c.width = w; c.height = h;
+      var x = c.getContext('2d'); x.fillStyle = col; x.fillRect(0, 0, w, h);
+      x.fillStyle = '#000'; x.fillRect(1, 1, w / 2, h / 3);
+      return c;
+    }
+    checkAsync('io.encodeJpeg su canvas ha gli stessi byte di Ref02.canvasToJpegBytes', function () {
+      var c = colored(64, 48, '#c33');
+      return Promise.all([io.encodeJpeg(c), Ref02.canvasToJpegBytes(c)]).then(function (r) { return sameBytes(r[0], r[1]); });
+    });
+    check('io.groupPagesForA4 raggruppa come Ref02', function () {
+      var c1 = colored(8, 8, '#fff'), c2 = colored(8, 8, '#eee'), c3 = colored(8, 8, '#ddd');
+      function mk() {
+        return [
+          { page: { docGroup: 1, docSide: 'fronte' }, canvas: c1 },
+          { page: { docGroup: 1, docSide: 'retro' }, canvas: c2 },
+          { page: { docGroup: null, docSide: 'fronte' }, canvas: c3 }
+        ];
+      }
+      function shape(g) { return JSON.stringify(g.map(function (x) { return [x.gid, !!x.sidesMap.fronte, !!x.sidesMap.retro]; })); }
+      var a = shape(io.groupPagesForA4(mk())), b = shape(Ref02.groupPagesForA4(mk()));
+      return a === b ? true : a + ' / ' + b;
+    });
+    check('io.composeA4Page ha gli stessi pixel di Ref02.composeA4Page', function () {
+      var c1 = colored(300, 200, '#fdd'), c2 = colored(200, 300, '#dfd');
+      var gs = [{ gid: 1, sidesMap: { fronte: c1, retro: c2 } }, { gid: 2, sidesMap: { fronte: c2, retro: null } }];
+      var a = io.composeA4Page(gs), b = Ref02.composeA4Page(gs);
+      if (a.ptW !== b.ptW || a.ptH !== b.ptH || a.canvas.width !== b.canvas.width || a.canvas.height !== b.canvas.height) return 'dimensioni diverse';
+      var da = a.canvas.getContext('2d').getImageData(0, 0, a.canvas.width, a.canvas.height).data;
+      var db = b.canvas.getContext('2d').getImageData(0, 0, b.canvas.width, b.canvas.height).data;
+      return sameBytes(da, db);
+    });
+  }
+
+  // Sezione convert: file in entrata, file elaborato in uscita. Le immagini sono sintetiche
+  // (Synth) e diventano Blob PNG, come le passerebbe un host.
+  function convertTests(sf, win) {
+    function canvasBlob(c) {
+      return new Promise(function (res, rej) {
+        c.toBlob(function (b) { b ? res(b) : rej(new Error('toBlob fallito')); }, 'image/png');
+      });
+    }
+    var made = {};
+    function synth(name) {
+      if (!made[name]) {
+        var m = Synth.make(Synth.cases[name]);
+        made[name] = canvasBlob(m.canvas).then(function (blob) { return { blob: blob, corners: m.corners, dataUrl: m.dataUrl }; });
+      }
+      return made[name];
+    }
+    function head(b, n) { return Array.prototype.slice.call(b, 0, n); }
+    function ascii(b, n) { return String.fromCharCode.apply(null, head(b, n)); }
+    function rejected(p, code) {
+      return p.then(function () { return 'non ha rifiutato'; }, function (e) {
+        if (!e || typeof e !== 'object') return 'rifiuto non oggetto: ' + e;
+        if (Object.prototype.toString.call(e) === '[object Error]') return 'rifiuto è un Error generico: ' + e.message;
+        if (e.code !== code) return 'codice ' + e.code + ' invece di ' + code;
+        return typeof e.message === 'string' && e.message ? true : 'message mancante';
+      });
+    }
+    function black(w, h) {
+      var c = document.createElement('canvas'); c.width = w; c.height = h;
+      var x = c.getContext('2d'); x.fillStyle = '#141414'; x.fillRect(0, 0, w, h);
+      return canvasBlob(c);
+    }
+    function projectJson(A, name) {
+      return Ref02.serializeProject({
+        projectName: name, a4Compose: false,
+        pages: [{ originalSrc: A.dataUrl, name: 'a.png', settings: Ref02.defaultSettings(), corners: A.corners, width: 800, height: 600, docGroup: null, docSide: 'fronte' }]
+      });
+    }
+    function crc32(buf) {
+      var c, crc = 0xFFFFFFFF;
+      for (var i = 0; i < buf.length; i++) {
+        c = (crc ^ buf[i]) & 0xFF;
+        for (var k = 0; k < 8; k++) c = c & 1 ? (c >>> 1) ^ 0xEDB88320 : c >>> 1;
+        crc = (crc >>> 8) ^ c;
+      }
+      return (crc ^ 0xFFFFFFFF) >>> 0;
+    }
+    // PNG a 1 bit di 8000x6300 (50.4 milioni di pixel) con dati compressi minuscoli.
+    function hugePng() {
+      var W = 8000, H = 6300;
+      function chunk(type, data) {
+        var out = new Uint8Array(12 + data.length), dv = new DataView(out.buffer);
+        dv.setUint32(0, data.length);
+        for (var i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+        out.set(data, 8);
+        dv.setUint32(8 + data.length, crc32(out.subarray(4, 8 + data.length)));
+        return out;
+      }
+      var ihdr = new Uint8Array(13), dv = new DataView(ihdr.buffer);
+      dv.setUint32(0, W); dv.setUint32(4, H); ihdr[8] = 1; ihdr[9] = 0;
+      var raw = new Uint8Array(H * (1 + W / 8));
+      var cs = new Blob([raw]).stream().pipeThrough(new CompressionStream('deflate'));
+      return new Response(cs).arrayBuffer().then(function (ab) {
+        var parts = [new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', new Uint8Array(ab)), chunk('IEND', new Uint8Array(0))];
+        var n = parts.reduce(function (a, p) { return a + p.length; }, 0), out = new Uint8Array(n), o = 0;
+        parts.forEach(function (p) { out.set(p, o); o += p.length; });
+        return out;
+      });
+    }
+
+    checkAsync('convert di un PNG con preset id da un PDF di una pagina', function () {
+      return synth('A-ombra').then(function (A) { return sf.convert(A.blob, { preset: 'id' }); }).then(function (r) {
+        if (r.mime !== 'application/pdf') return 'mime ' + r.mime;
+        if (ascii(r.bytes, 5) !== '%PDF-') return 'intestazione ' + ascii(r.bytes, 5);
+        if (!(r.bytes instanceof win.Uint8Array)) return 'bytes non Uint8Array';
+        if (r.pages !== 1) return 'pages ' + r.pages;
+        if (r.report.length !== 1) return 'report ' + r.report.length;
+        if (['otsu-v0', 'default'].indexOf(r.report[0].method) < 0) return 'method ' + r.report[0].method;
+        if (!/^scanforge-.*\.pdf$/.test(r.fileName)) return 'fileName ' + r.fileName;
+        var rp = r.report[0], ms = rp.ms;
+        if (rp.confidence !== null || !rp.corners || !rp.corners.tl || typeof rp.name !== 'string') return 'report incompleto';
+        if (typeof ms.detect !== 'number' || typeof ms.process !== 'number' || typeof ms.encode !== 'number') return 'ms incompleto';
+        return true;
+      });
+    });
+    checkAsync('convert con projectName da il nome file', function () {
+      return synth('A-ombra').then(function (A) { return sf.convert(A.blob, { projectName: 'Carta Identita', preset: 'id' }); }).then(function (r) {
+        return r.fileName === 'carta-identita.pdf' ? true : r.fileName;
+      });
+    });
+    checkAsync('convert con output jpeg da un JPEG', function () {
+      return synth('A-ombra').then(function (A) { return sf.convert(A.blob, { preset: 'id', output: 'jpeg' }); }).then(function (r) {
+        if (r.mime !== 'image/jpeg') return 'mime ' + r.mime;
+        if (r.bytes[0] !== 0xFF || r.bytes[1] !== 0xD8) return 'byte ' + head(r.bytes, 2);
+        if (r.pages !== 1 || !/\.jpg$/.test(r.fileName)) return 'pages/fileName ' + r.pages + ' ' + r.fileName;
+        return true;
+      });
+    });
+    checkAsync('convert con output png da un PNG', function () {
+      return synth('A-ombra').then(function (A) { return sf.convert(A.blob, { output: 'png' }); }).then(function (r) {
+        var sig = head(r.bytes, 4).join(',');
+        if (r.mime !== 'image/png' || sig !== '137,80,78,71') return r.mime + ' ' + sig;
+        return /\.png$/.test(r.fileName) ? true : r.fileName;
+      });
+    });
+    checkAsync('convert con angoli forniti da method given', function () {
+      return synth('A-ombra').then(function (A) {
+        return sf.convert(A.blob, { preset: 'id', corners: A.corners }).then(function (r) {
+          if (r.report[0].method !== 'given') return 'method ' + r.report[0].method;
+          return JSON.stringify(r.report[0].corners) === JSON.stringify(A.corners) ? true : 'angoli diversi';
+        });
+      });
+    });
+    checkAsync('convert accetta angoli come array di quattro punti', function () {
+      return synth('A-ombra').then(function (A) {
+        var c = A.corners;
+        return sf.convert(A.blob, { corners: [c.tl, c.tr, c.br, c.bl] });
+      }).then(function (r) { return r.report[0].method === 'given' ? true : 'method ' + r.report[0].method; });
+    });
+    checkAsync('convert rifiuta angoli non validi con bad-input', function () {
+      return synth('A-ombra').then(function (A) { return rejected(sf.convert(A.blob, { corners: [{ x: 1, y: 2 }] }), 'bad-input'); });
+    });
+    checkAsync('convert con rilevazione rifiutata usa gli angoli predefiniti', function () {
+      return black(120, 90).then(function (b) { return sf.convert(b, {}); }).then(function (r) {
+        if (r.report[0].method !== 'default') return 'method ' + r.report[0].method;
+        return JSON.stringify(r.report[0].corners) === JSON.stringify(sf.core.defaultCorners()) ? true : 'angoli non predefiniti';
+      });
+    });
+    checkAsync('convert con preset photo ignora gli angoli (method default)', function () {
+      return synth('A-ombra').then(function (A) { return sf.convert(A.blob, { preset: 'photo', corners: A.corners }); }).then(function (r) {
+        return r.report[0].method === 'default' ? true : 'method ' + r.report[0].method;
+      });
+    });
+    checkAsync('convert di due immagini con a4Compose da una pagina PDF e due report', function () {
+      return Promise.all([synth('A-ombra'), synth('B-scuro')]).then(function (a) {
+        return sf.convert([a[0].blob, a[1].blob], { preset: 'id', a4Compose: true });
+      }).then(function (r) {
+        if (r.pages !== 1) return 'pages ' + r.pages;
+        if (r.report.length !== 2) return 'report ' + r.report.length;
+        if (ascii(r.bytes, 5) !== '%PDF-') return 'non è un PDF';
+        var txt = new TextDecoder('latin1').decode(r.bytes);
+        return txt.indexOf('/MediaBox [0 0 595.28 841.89]') >= 0 ? true : 'MediaBox non A4';
+      });
+    });
+    checkAsync('convert di cinque immagini con a4Compose da due pagine PDF', function () {
+      return Promise.all([synth('A-ombra'), synth('B-scuro')]).then(function (a) {
+        return sf.convert([a[0].blob, a[1].blob, a[0].blob, a[1].blob, a[0].blob], { a4Compose: true });
+      }).then(function (r) { return r.pages === 2 && r.report.length === 5 ? true : 'pages ' + r.pages + ' report ' + r.report.length; });
+    });
+    checkAsync('convert di due immagini senza a4Compose da un PDF di due pagine', function () {
+      return Promise.all([synth('A-ombra'), synth('B-scuro')]).then(function (a) {
+        return sf.convert([a[0].blob, a[1].blob]);
+      }).then(function (r) { return r.pages === 2 && r.report.length === 2 ? true : 'pages ' + r.pages; });
+    });
+    checkAsync('convert jpeg con più pagine restituisce la prima con only-first-page', function () {
+      return Promise.all([synth('A-ombra'), synth('B-scuro')]).then(function (a) {
+        return sf.convert([a[0].blob, a[1].blob], { output: 'jpeg' });
+      }).then(function (r) {
+        if (r.pages !== 1) return 'pages ' + r.pages;
+        return r.report[0].warning === 'only-first-page' ? true : 'warning ' + r.report[0].warning;
+      });
+    });
+    checkAsync('convert con output project da JSON accettato da parseProject con due pagine', function () {
+      return Promise.all([synth('A-ombra'), synth('B-scuro')]).then(function (a) {
+        return sf.convert([a[0].blob, a[1].blob], { output: 'project', preset: 'id', projectName: 'Pratica' });
+      }).then(function (r) {
+        if (r.mime !== 'application/json' || r.fileName !== 'pratica.json') return r.mime + ' ' + r.fileName;
+        var p = sf.io.parseProject(new TextDecoder().decode(r.bytes));
+        if (p.pages.length !== 2 || r.pages !== 2 || r.report.length !== 2) return 'pagine ' + p.pages.length;
+        if (p.projectName !== 'Pratica') return 'projectName ' + p.projectName;
+        if (!/^data:image\//.test(p.pages[0].originalSrc)) return 'originalSrc non è un data URL';
+        if (p.pages[0].settings.contrast !== 20 || p.pages[0].width !== 800 || p.pages[0].height !== 600) return 'impostazioni o misure errate';
+        return true;
+      });
+    });
+    checkAsync('convert di un progetto con pratica e a4Compose produce un PDF', function () {
+      return Promise.all([synth('A-ombra'), synth('B-scuro')]).then(function (a) {
+        return sf.convert([a[0].blob, a[1].blob], { output: 'project' });
+      }).then(function (r) {
+        var p = sf.io.parseProject(new TextDecoder().decode(r.bytes));
+        p.a4Compose = true;
+        p.practice = { cognome: 'Rossi', nome: 'Mario', documents: [{ id: 'd1', typeId: 'cie', mode: null, pageIds: [p.pages[0].id, p.pages[1].id] }], unassigned: [] };
+        return sf.convert(sf.io.serializeProject(p));
+      }).then(function (r) {
+        return ascii(r.bytes, 5) === '%PDF-' && r.pages === 1 ? true : 'pages ' + r.pages;
+      });
+    });
+    checkAsync('convert di un progetto prodotto da convert da un PDF', function () {
+      return Promise.all([synth('A-ombra'), synth('B-scuro')]).then(function (a) {
+        return sf.convert([a[0].blob, a[1].blob], { output: 'project' });
+      }).then(function (r) { return sf.convert(new TextDecoder().decode(r.bytes)); }).then(function (r) {
+        if (ascii(r.bytes, 5) !== '%PDF-' || r.pages !== 2) return 'pages ' + r.pages;
+        return r.report.every(function (x) { return x.method === 'project'; }) ? true : 'method ' + r.report[0].method;
+      });
+    });
+    checkAsync('convert di un progetto 0.2 senza keystoneV da un PDF', function () {
+      return synth('A-ombra').then(function (A) {
+        var s = Ref02.defaultSettings();
+        delete s.keystoneV; delete s.keystoneH; delete s.rotFine;
+        var json = Ref02.serializeProject({
+          projectName: 'Vecchio', a4Compose: false,
+          pages: [{ originalSrc: A.dataUrl, name: 'a.png', settings: s, corners: A.corners, width: 800, height: 600, docGroup: null, docSide: 'fronte' }]
+        });
+        return sf.convert(json, { preset: 'id' });
+      }).then(function (r) {
+        if (ascii(r.bytes, 5) !== '%PDF-' || r.pages !== 1) return 'non è un PDF di una pagina';
+        if (r.report[0].method !== 'project') return 'method ' + r.report[0].method;
+        return r.fileName === 'vecchio.pdf' ? true : r.fileName;
+      });
+    });
+    checkAsync('convert di un oggetto progetto equivale alla sua stringa', function () {
+      return synth('A-ombra').then(function (A) {
+        var json = projectJson(A, 'Ogg');
+        return Promise.all([sf.convert(json), sf.convert(JSON.parse(json))]);
+      }).then(function (r) { return sameBytes(r[0].bytes, r[1].bytes); });
+    });
+    checkAsync('convert accetta data URL, Uint8Array e ArrayBuffer', function () {
+      return synth('A-ombra').then(function (A) {
+        return A.blob.arrayBuffer().then(function (ab) {
+          return Promise.all([sf.convert(A.dataUrl), sf.convert(new Uint8Array(ab)), sf.convert(ab)]);
+        });
+      }).then(function (r) {
+        var ok = r.every(function (x) { return x.pages === 1 && ascii(x.bytes, 5) === '%PDF-'; });
+        return ok ? true : 'una delle forme non ha dato un PDF';
+      });
+    });
+    checkAsync('convert con output project da byte senza tipo si rilegge con convert', function () {
+      return synth('A-ombra').then(function (A) { return A.blob.arrayBuffer(); }).then(function (ab) {
+        return sf.convert(new Uint8Array(ab), { output: 'project' });
+      }).then(function (r) { return sf.convert(new TextDecoder().decode(r.bytes)); }).then(function (r) {
+        return r.pages === 1 ? true : 'pages ' + r.pages;
+      });
+    });
+    checkAsync('convert di un progetto insieme a un altro input rifiuta con bad-input', function () {
+      return synth('A-ombra').then(function (A) { return rejected(sf.convert([projectJson(A, 'x'), A.blob]), 'bad-input'); });
+    });
+    checkAsync('convert con preset sconosciuto rifiuta con bad-input', function () {
+      return synth('A-ombra').then(function (A) { return rejected(sf.convert(A.blob, { preset: 'nope' }), 'bad-input'); });
+    });
+    checkAsync('convert con output sconosciuto rifiuta con bad-input', function () {
+      return synth('A-ombra').then(function (A) { return rejected(sf.convert(A.blob, { output: 'gif' }), 'bad-input'); });
+    });
+    checkAsync('convert([]) rifiuta con bad-input', function () { return rejected(sf.convert([]), 'bad-input'); });
+    checkAsync('convert(42) rifiuta con bad-input', function () { return rejected(sf.convert(42), 'bad-input'); });
+    checkAsync('convert(Uint8Array vuoto) rifiuta con bad-input', function () { return rejected(sf.convert(new Uint8Array(0)), 'bad-input'); });
+    checkAsync('convert(oggetto senza pages) rifiuta con bad-input', function () { return rejected(sf.convert({ a: 1 }), 'bad-input'); });
+    checkAsync('convert(byte non immagine) rifiuta con bad-image', function () {
+      return rejected(sf.convert(new Uint8Array([1, 2, 3, 4])), 'bad-image');
+    });
+    checkAsync('convert di un\'immagine oltre 50 milioni di pixel rifiuta con too-large', function () {
+      return hugePng().then(function (bytes) { return rejected(sf.convert(bytes), 'too-large'); });
+    });
+    checkAsync('due convert in parallelo danno gli stessi byte', function () {
+      return synth('A-ombra').then(function (A) {
+        var o = { preset: 'id', projectName: 'Par' };
+        return Promise.all([sf.convert(A.blob, o), sf.convert(A.blob, o)]);
+      }).then(function (r) { return sameBytes(r[0].bytes, r[1].bytes); });
+    });
+    checkAsync('due convert in parallelo con a4Compose danno gli stessi byte', function () {
+      return Promise.all([synth('A-ombra'), synth('B-scuro')]).then(function (a) {
+        var o = { preset: 'id', a4Compose: true };
+        return Promise.all([sf.convert([a[0].blob, a[1].blob], o), sf.convert([a[0].blob, a[1].blob], o)]);
+      }).then(function (r) { return sameBytes(r[0].bytes, r[1].bytes); });
+    });
+
+    // ---- validazione di angoli e impostazioni, rilevazione, limite d'uscita ----
+    var BAD_CORNERS = {
+      'in pixel invece che in percentuale': { tl: { x: 0, y: 0 }, tr: { x: 1200, y: 0 }, br: { x: 1200, y: 900 }, bl: { x: 0, y: 900 } },
+      'sotto -100': { tl: { x: -101, y: 0 }, tr: { x: 100, y: 0 }, br: { x: 100, y: 100 }, bl: { x: 0, y: 100 } },
+      'sopra 200': { tl: { x: 0, y: 0 }, tr: { x: 100, y: 0 }, br: { x: 100, y: 201 }, bl: { x: 0, y: 100 } },
+      'con NaN': { tl: { x: NaN, y: 0 }, tr: { x: 100, y: 0 }, br: { x: 100, y: 100 }, bl: { x: 0, y: 100 } },
+      'con Infinity': { tl: { x: 0, y: 0 }, tr: { x: Infinity, y: 0 }, br: { x: 100, y: 100 }, bl: { x: 0, y: 100 } }
+    };
+    Object.keys(BAD_CORNERS).forEach(function (k) {
+      checkAsync('convert rifiuta angoli ' + k + ' con bad-input', function () {
+        return synth('A-ombra').then(function (A) { return rejected(sf.convert(A.blob, { corners: BAD_CORNERS[k] }), 'bad-input'); });
+      });
+    });
+    var BAD_SETTINGS = {
+      'sharpen testo': { sharpen: 'abc' },
+      'contrast testo': { contrast: '20' },
+      'brightness NaN': { brightness: NaN },
+      'rotFine Infinity': { rotFine: Infinity },
+      'keystoneV nullo': { keystoneV: null },
+      'keystoneH oggetto': { keystoneH: {} },
+      'bw numero': { bw: 1 },
+      'autoEnhance testo': { autoEnhance: 'si' },
+      'shadows testo': { shadows: 'false' },
+      'perspective numero': { perspective: 0 },
+      'contrast fuori intervallo': { contrast: 101 },
+      'brightness fuori intervallo': { brightness: -101 },
+      'sharpen negativa': { sharpen: -1 },
+      'sharpen fuori intervallo': { sharpen: 101 },
+      'rotFine fuori intervallo': { rotFine: 46 },
+      'keystoneV fuori intervallo': { keystoneV: 101 },
+      'keystoneH fuori intervallo': { keystoneH: -101 },
+      'mode sconosciuto': { mode: 'xyz' },
+      'mode numero': { mode: 1 },
+      'docType sconosciuto': { docType: 'abc' },
+      'inchiostro sopra 0,5': { inchiostro: 0.9 },
+      'inchiostro sotto 0,1': { inchiostro: 0.05 },
+      'inchiostro testo': { inchiostro: 'x' },
+      'inchiostro NaN': { inchiostro: NaN },
+      'angoliArrotondati testo': { angoliArrotondati: 'sì' },
+      'angoliArrotondati numero': { angoliArrotondati: 1 }
+    };
+    Object.keys(BAD_SETTINGS).forEach(function (k) {
+      checkAsync('convert rifiuta settings con ' + k + ' con bad-input', function () {
+        return synth('A-ombra').then(function (A) { return rejected(sf.convert(A.blob, { settings: BAD_SETTINGS[k] }), 'bad-input'); });
+      });
+    });
+    var BAD_OPTS = {
+      'mode sconosciuto': { mode: 'xyz' },
+      'mode nullo di tipo errato': { mode: 5 },
+      'docType sconosciuto': { docType: 'abc' },
+      'docType numero': { docType: 2 }
+    };
+    Object.keys(BAD_OPTS).forEach(function (k) {
+      checkAsync('convert rifiuta opts con ' + k + ' con bad-input', function () {
+        return synth('A-ombra').then(function (A) { return rejected(sf.convert(A.blob, BAD_OPTS[k]), 'bad-input'); });
+      });
+    });
+    checkAsync('convert accetta mode originale e i valori validi delle nuove impostazioni', function () {
+      return synth('A-ombra').then(function (A) {
+        return Promise.all([
+          sf.convert(A.blob, { settings: { mode: 'originale' } }),
+          sf.convert(A.blob, { mode: 'originale', docType: 'foglio' }),
+          sf.convert(A.blob, { settings: { mode: 'bn', docType: 'identita', inchiostro: 0.1, angoliArrotondati: true } }),
+          sf.convert(A.blob, { settings: { inchiostro: 0.5, angoliArrotondati: false } })
+        ]);
+      }).then(function (r) {
+        return r.every(function (x) { return x.pages === 1 && ascii(x.bytes, 5) === '%PDF-'; }) ? true : 'non è un PDF';
+      });
+    });
+    checkAsync('convert in bianco e nero e senza docType produce un PDF', function () {
+      return synth('A-ombra').then(function (A) {
+        return Promise.all([
+          sf.convert(A.blob, { preset: 'foglio-bn' }),
+          sf.convert(A.blob, { settings: { mode: 'colori' } }),
+          sf.convert(A.blob, { settings: { mode: 'bn' } })
+        ]);
+      }).then(function (r) {
+        return r.every(function (x) { return x.pages === 1 && ascii(x.bytes, 5) === '%PDF-'; }) ? true : 'non è un PDF';
+      });
+    });
+    check('classifyDocument restituisce un tipo valido e una confidenza tra 0 e 1', function () {
+      var bianca = { data: new Uint8ClampedArray(200 * 150 * 4).fill(255), width: 200, height: 150 };
+      var r = sf.classifyDocument(bianca, null);
+      if (!r || (r.docType !== 'identita' && r.docType !== 'foglio')) return 'tipo ' + JSON.stringify(r);
+      if (!(r.confidence >= 0 && r.confidence <= 1)) return 'confidenza ' + r.confidence;
+      // immagine piatta: nessun indizio, scelta prudente
+      return r.docType === 'identita' && r.confidence < 0.6 ? true : 'piatta: ' + JSON.stringify(r);
+    });
+    function truthBlob(kind, spec) {
+      var t = Synth.truth(kind, spec);
+      var c = document.createElement('canvas'); c.width = t.width; c.height = t.height;
+      c.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(t.data), t.width, t.height), 0, 0);
+      return canvasBlob(c);
+    }
+    checkAsync('convert riporta mode, docType e docTypeConfidence solo con una modalità', function () {
+      return synth('A-ombra').then(function (A) {
+        var frozen = Object.freeze({ mode: 'grigi', corners: Object.freeze(JSON.parse(JSON.stringify(A.corners))) });
+        return Promise.all([
+          sf.convert(A.blob, { preset: 'foglio-grigi', corners: A.corners }),
+          sf.convert(A.blob, { preset: 'identita-colori', corners: A.corners }),
+          sf.convert(A.blob, frozen),
+          sf.convert(A.blob, { mode: 'originale', corners: A.corners }),
+          sf.convert(A.blob, { corners: A.corners }),
+          sf.convert(A.blob, { preset: 'foglio-bn', output: 'project', corners: A.corners })
+        ]);
+      }).then(function (r) {
+        var g = r[0].report[0], c = r[1].report[0], a = r[2].report[0], o = r[3].report[0], n = r[4].report[0], p = r[5].report[0];
+        if (ascii(r[0].bytes, 5) !== '%PDF-') return 'foglio-grigi non è un PDF';
+        if (g.mode !== 'grigi' || g.docType !== 'foglio' || 'docTypeConfidence' in g) return 'foglio-grigi ' + JSON.stringify(g);
+        if (c.mode !== 'colori' || c.docType !== 'identita' || 'docTypeConfidence' in c) return 'identita-colori ' + JSON.stringify(c);
+        if (a.mode !== 'grigi' || (a.docType !== 'identita' && a.docType !== 'foglio')) return 'mode grigi ' + JSON.stringify(a);
+        if (!(a.docTypeConfidence >= 0 && a.docTypeConfidence <= 1)) return 'confidenza ' + a.docTypeConfidence;
+        if (o.mode !== 'originale' || 'docType' in o || 'docTypeConfidence' in o) return 'originale ' + JSON.stringify(o);
+        if ('mode' in n || 'docType' in n || 'docTypeConfidence' in n) return 'senza mode ' + JSON.stringify(n);
+        if (p.mode !== 'bn' || p.docType !== 'foglio') return 'progetto ' + JSON.stringify(p);
+        return true;
+      });
+    });
+    checkAsync('convert con mode e senza docType non fissa il tipo nel progetto', function () {
+      return synth('A-ombra').then(function (A) {
+        return sf.convert(A.blob, { mode: 'colori', output: 'project', corners: A.corners });
+      }).then(function (r) {
+        var st = sf.io.parseProject(new TextDecoder().decode(r.bytes)).pages[0].settings;
+        if (st.mode !== 'colori' || st.docType != null) return 'settings ' + JSON.stringify(st);
+        return r.report[0].docType ? true : 'report senza docType';
+      });
+    });
+    checkAsync('convert classifica da sé un foglio e una tessera di verità nota', function () {
+      return Promise.all([
+        truthBlob('sheet', { w: 600, h: 849, seed: 1 }),
+        truthBlob('card', { w: 856, h: 540, seed: 3 })
+      ]).then(function (b) {
+        var noPersp = { settings: { perspective: false } };
+        return Promise.all([
+          sf.convert(b[0], Object.assign({ mode: 'grigi' }, noPersp)),
+          sf.convert(b[1], Object.assign({ mode: 'colori' }, noPersp))
+        ]);
+      }).then(function (r) {
+        var s = r[0].report[0], c = r[1].report[0];
+        if (s.docType !== 'foglio') return 'foglio visto come ' + JSON.stringify(s);
+        if (c.docType !== 'identita') return 'tessera vista come ' + JSON.stringify(c);
+        return true;
+      });
+    });
+    checkAsync('due convert in parallelo con mode danno gli stessi byte', function () {
+      return synth('A-ombra').then(function (A) {
+        return Promise.all([
+          sf.convert(A.blob, { mode: 'grigi', corners: A.corners }),
+          sf.convert(A.blob, { mode: 'grigi', corners: A.corners })
+        ]);
+      }).then(function (r) { return sameBytes(r[0].bytes, r[1].bytes); });
+    });
+    function projectSettings(A, opts) {
+      return sf.convert(A.blob, Object.assign({ output: 'project' }, opts)).then(function (r) {
+        return sf.io.parseProject(new TextDecoder().decode(r.bytes)).pages[0].settings;
+      });
+    }
+    checkAsync('convert porta in settings i valori dei preset nuovi e di opts.mode e opts.docType', function () {
+      return synth('A-ombra').then(function (A) {
+        return Promise.all([
+          projectSettings(A, { preset: 'foglio-bn' }),
+          projectSettings(A, { preset: 'identita-grigi' }),
+          projectSettings(A, { preset: 'foglio-colori', mode: 'bn', docType: 'identita' }),
+          projectSettings(A, { preset: 'foglio-bn', mode: 'grigi', settings: { inchiostro: 0.4 } }),
+          projectSettings(A, { preset: 'id' })
+        ]);
+      }).then(function (r) {
+        if (r[0].mode !== 'bn' || r[0].docType !== 'foglio' || r[0].inchiostro !== 0.25 || r[0].sharpen !== 0) return 'foglio-bn ' + JSON.stringify(r[0]);
+        if (r[1].mode !== 'grigi' || r[1].docType !== 'identita' || r[1].angoliArrotondati !== true || r[1].sharpen !== 2) return 'identita-grigi ' + JSON.stringify(r[1]);
+        if (r[2].mode !== 'bn' || r[2].docType !== 'identita') return 'opts.mode non sovrascrive il preset ' + JSON.stringify(r[2]);
+        if (r[3].mode !== 'grigi' || r[3].inchiostro !== 0.4) return 'settings non sovrascrive ' + JSON.stringify(r[3]);
+        if ('mode' in r[4] || 'docType' in r[4]) return 'il preset id ha acquisito mode ' + JSON.stringify(r[4]);
+        return true;
+      });
+    });
+    checkAsync('convert rifiuta le impostazioni sbagliate di una pagina di progetto con bad-input', function () {
+      return synth('A-ombra').then(function (A) {
+        var st = Ref02.defaultSettings(); st.sharpen = 'abc';
+        var json = Ref02.serializeProject({
+          projectName: 'x', a4Compose: false,
+          pages: [{ originalSrc: A.dataUrl, name: 'a.png', settings: st, corners: A.corners, width: 800, height: 600, docGroup: null, docSide: 'fronte' }]
+        });
+        return rejected(sf.convert(json), 'bad-input');
+      });
+    });
+    checkAsync('convert accetta settings validi ai limiti e ignora le chiavi undefined', function () {
+      return synth('A-ombra').then(function (A) {
+        return sf.convert(A.blob, { settings: { contrast: 100, brightness: -100, sharpen: 100, rotFine: -45, keystoneV: undefined, bw: true, perspective: false } });
+      }).then(function (r) { return r.pages === 1 && ascii(r.bytes, 5) === '%PDF-' ? true : 'esito inatteso'; });
+    });
+    checkAsync('convert accetta angoli fuori cornice entro -100..200 e angoli degeneri', function () {
+      return synth('A-ombra').then(function (A) {
+        var fuori = { tl: { x: -20, y: -20 }, tr: { x: 120, y: -20 }, br: { x: 120, y: 120 }, bl: { x: -20, y: 120 } };
+        var deg = { tl: { x: 50, y: 50 }, tr: { x: 50, y: 50 }, br: { x: 50, y: 50 }, bl: { x: 50, y: 50 } };
+        return Promise.all([sf.convert(A.blob, { preset: 'id', corners: fuori }), sf.convert(A.blob, { preset: 'id', corners: deg })]);
+      }).then(function (r) {
+        return r.every(function (x) { return x.pages === 1 && ascii(x.bytes, 5) === '%PDF-'; }) ? true : 'non è un PDF';
+      });
+    });
+    checkAsync('convert con angoli che generano un\'uscita enorme rifiuta con too-large', function () {
+      // 3000x3000 resta intero (maxDim 3000); con angoli da -100 a 200 l'uscita sarebbe 9000x9000
+      var c = document.createElement('canvas'); c.width = 3000; c.height = 3000;
+      var x = c.getContext('2d'); x.fillStyle = '#ddd'; x.fillRect(0, 0, 3000, 3000);
+      var enorme = { tl: { x: -100, y: -100 }, tr: { x: 200, y: -100 }, br: { x: 200, y: 200 }, bl: { x: -100, y: 200 } };
+      return canvasBlob(c).then(function (b) { return rejected(sf.convert(b, { corners: enorme }), 'too-large'); });
+    });
+    checkAsync('convert con maxDim sotto 1 rifiuta con bad-input, con Infinity funziona', function () {
+      return synth('A-ombra').then(function (A) {
+        return Promise.all([rejected(sf.convert(A.blob, { maxDim: 0.3 }), 'bad-input'), rejected(sf.convert(A.blob, { maxDim: 0 }), 'bad-input'),
+          rejected(sf.convert(A.blob, { maxDim: NaN }), 'bad-input'), sf.convert(A.blob, { maxDim: Infinity })]);
+      }).then(function (r) {
+        if (r[0] !== true || r[1] !== true || r[2] !== true) return 'esiti ' + r.slice(0, 3).join(',');
+        return r[3].pages === 1 ? true : 'maxDim Infinity non da un PDF';
+      });
+    });
+    // La rilevazione di convert deve dare gli stessi angoli della 0.2 anche oltre i 2000 px
+    // (qui l'immagine resta intera: maxDim 3000).
+    // Ref02.detect usa stato condiviso: le chiamate vanno una alla volta.
+    var refChain = Promise.resolve();
+    function refDetect(url) {
+      var p = refChain.then(function () { return Ref02.detect(url); });
+      refChain = p.then(function () {}, function () {});
+      return p;
+    }
+    // Il browser tiene in cache le immagini data: già decodificate: il riferimento va preso per
+    // primo e la rilevazione di convert deve decodificare a 400 px prima della piena risoluzione.
+    [{ n: 'E-grande', fmt: 'png' }, { n: 'E-grande', fmt: 'jpeg' }, { n: 'E-grande', fmt: 'png', blob: true, seed: 55 },
+     { n: 'F-enorme', fmt: 'png' }, { n: 'G-media', fmt: 'png' }].forEach(function (t) {
+      checkAsync('convert con corners auto su ' + t.n + ' ' + t.fmt + (t.blob ? ' (Blob)' : '') + ' ha gli angoli di Ref02.detect', function () {
+        // Un seme proprio evita di condividere la cache dei data URL con le altre prove
+        var m = Synth.make(t.seed ? Object.assign({}, Synth.cases[t.n], { seed: t.seed }) : Synth.cases[t.n]);
+        var url = t.fmt === 'jpeg' ? m.canvas.toDataURL('image/jpeg', 0.9) : m.dataUrl;
+        return refDetect(url).then(function (ref) {
+          var input = t.blob ? canvasBlob(m.canvas) : url;
+          return Promise.resolve(input).then(function (inp) { return sf.convert(inp, { preset: 'id' }); }).then(function (r) {
+            var got = r.report[0].corners;
+            if (ref === null) return r.report[0].method === 'default' ? true : 'attesi angoli predefiniti';
+            var same = ['tl', 'tr', 'br', 'bl'].every(function (k) { return ref[k].x === got[k].x && ref[k].y === got[k].y; });
+            return same ? true : 'diversi: 0.2 ' + JSON.stringify(ref) + ' convert ' + JSON.stringify(got);
+          });
+        });
+      });
+    });
+  }
+
+  // Contratto di detectDocument e process senza ops, preset congelati, caricamento UMD.
+  function topLevelTests(sf, win) {
+    function loaded(name) {
+      var m = Synth.make(Synth.cases[name]);
+      return sf.io.loadImage(m.dataUrl, { maxDim: Infinity }).then(function (img) { return { img: img, corners: m.corners }; });
+    }
+    function sameCorners(a, b) {
+      return ['tl', 'tr', 'br', 'bl'].every(function (k) { return a[k].x === b[k].x && a[k].y === b[k].y; });
+    }
+
+    checkAsync('detectDocument(img) senza ops funziona e coincide con quella con ops', function () {
+      return loaded('A-ombra').then(function (L) {
+        var senza = sf.detectDocument(L.img), con = sf.detectDocument(L.img, sf.io.createOps());
+        if (!senza.corners || senza.method !== 'otsu-v0') return 'risultato ' + JSON.stringify(senza);
+        return sameCorners(senza.corners, con.corners) ? true : 'angoli diversi';
+      });
+    });
+    checkAsync('detectDocument(img) senza ops su immagine uniforme da corners null', function () {
+      var c = document.createElement('canvas'); c.width = 800; c.height = 600;
+      var x = c.getContext('2d'); x.fillStyle = 'rgb(100,100,100)'; x.fillRect(0, 0, 800, 600);
+      return sf.io.loadImage(c.toDataURL('image/png'), { maxDim: Infinity }).then(function (img) {
+        return sf.detectDocument(img).corners === null ? true : 'corners non null';
+      });
+    });
+    checkAsync('process(img, opts) senza ops da lo stesso risultato che con ops', function () {
+      return loaded('A-ombra').then(function (L) {
+        var settings = Object.assign(sf.defaultSettings(), sf.presets.id, { rotFine: 2, keystoneV: 4 });
+        var opts = function () { return { corners: JSON.parse(JSON.stringify(L.corners)), settings: Object.assign({}, settings) }; };
+        var senza = sf.process(L.img, opts());
+        var con = sf.process(L.img, opts(), sf.io.createOps());
+        if (senza.width !== con.width || senza.height !== con.height) return 'dimensioni diverse';
+        return sameBytes(senza.data, con.data);
+      });
+    });
+    checkAsync('process senza ops con ombre e rotazione non lancia', function () {
+      return loaded('A-ombra').then(function (L) {
+        var out = sf.process(L.img, { corners: L.corners, settings: Object.assign(sf.defaultSettings(), { shadows: true, rotFine: 3 }) });
+        return out && out.width > 0 ? true : 'nessun risultato';
+      });
+    });
+    checkAsync('process accetta corners null senza prospettiva', function () {
+      return loaded('A-ombra').then(function (L) {
+        var out = sf.process(L.img, { corners: null, settings: Object.assign(sf.defaultSettings(), { perspective: false }) });
+        return out.width === L.img.width && out.height === L.img.height ? true : 'dimensioni cambiate';
+      });
+    });
+    checkAsync('process con mode originale senza ops funziona e non lascia alfa 0', function () {
+      return loaded('A-ombra').then(function (L) {
+        var out = sf.process(L.img, { corners: L.corners, settings: Object.assign(sf.defaultSettings(), { mode: 'originale' }) });
+        if (!out || !out.width) return 'nessun risultato';
+        for (var i = 3; i < out.data.length; i += 4) if (out.data[i] === 0) return 'alfa 0 alla posizione ' + i;
+        return true;
+      });
+    });
+    checkAsync('process con mode originale e rotazione (ops canvas) non lascia alfa 0', function () {
+      return loaded('A-ombra').then(function (L) {
+        var out = sf.process(L.img, { corners: L.corners, settings: Object.assign(sf.defaultSettings(), { mode: 'originale', rotFine: 3 }) });
+        for (var i = 3; i < out.data.length; i += 4) if (out.data[i] === 0) return 'alfa 0 alla posizione ' + i;
+        return true;
+      });
+    });
+    check('process con mode non valida lancia TypeError', function () {
+      var img = { data: new Uint8ClampedArray(16 * 16 * 4), width: 16, height: 16 };
+      try { sf.process(img, { corners: null, settings: Object.assign(sf.defaultSettings(), { mode: 'xyz' }) }); } catch (e) {
+        return (e instanceof win.TypeError && /mode non valida/.test(e.message)) ? true : 'errore ' + e;
+      }
+      return 'non ha lanciato';
+    });
+    checkAsync('process senza mode resta il percorso 0.2 (stessi byte del core)', function () {
+      return loaded('A-ombra').then(function (L) {
+        var settings = Object.assign(sf.defaultSettings(), sf.presets.document, { rotFine: 2 });
+        var opts = function () { return { corners: JSON.parse(JSON.stringify(L.corners)), settings: Object.assign({}, settings) }; };
+        var a = sf.process(L.img, opts()), b = sf.core.process(L.img, opts(), sf.io.createOps());
+        if (a.width !== b.width || a.height !== b.height) return 'dimensioni diverse';
+        return sameBytes(a.data, b.data);
+      });
+    });
+    check('il core grezzo richiede ops: core.detectDocument(img) senza ops lancia', function () {
+      var img = { data: new Uint8ClampedArray(800 * 600 * 4), width: 800, height: 600 };
+      try { sf.core.detectDocument(img); } catch (e) { return true; }
+      return 'non ha lanciato';
+    });
+    check('i preset sono congelati', function () {
+      if (!win.Object.isFrozen(sf.presets)) return 'oggetto presets non congelato';
+      var bad = Object.keys(sf.presets).filter(function (k) { return !win.Object.isFrozen(sf.presets[k]); });
+      if (bad.length) return 'non congelati: ' + bad.join(', ');
+      var prima = sf.presets.document.contrast;
+      try { sf.presets.document.contrast = 77; } catch (e) { /* modalita strict del chiamante */ }
+      return sf.presets.document.contrast === prima ? true : 'valore modificato';
+    });
+    check('il blocco sf-core con un global module riempie anche globalThis.ScanForge', function () {
+      var text = win.document.getElementById('sf-core').textContent;
+      var fr = document.createElement('iframe');
+      fr.style.display = 'none';
+      document.body.appendChild(fr);
+      try {
+        var w2 = fr.contentWindow;
+        w2.module = { exports: {} };
+        w2.eval(text);
+        if (!w2.ScanForge || !w2.ScanForge.core) return 'globalThis.ScanForge senza core';
+        if (!w2.module.exports || !w2.module.exports.core) return 'module.exports senza core';
+        if (w2.ScanForge.apiVersion !== 1 || w2.ScanForge.version !== sf.version) return 'versione errata';
+        return true;
+      } finally {
+        document.body.removeChild(fr);
+      }
+    });
+  }
+
+  // Sezione whatsapp: simulatore dell'invio via WhatsApp (riduzione a 1600 px, JPEG 0,65).
+  function whatsappTests() {
+    function bigSynth() {
+      return Synth.make(Object.assign({}, Synth.cases['A-ombra'], { w: 2400, h: 1800 }));
+    }
+    function jpegBytes(canvas, q) {
+      return new Promise(function (res, rej) {
+        canvas.toBlob(function (b) { b ? res(b.arrayBuffer()) : rej(new Error('toBlob fallito')); }, 'image/jpeg', q);
+      }).then(function (ab) { return new Uint8Array(ab); });
+    }
+    // Intestazione JPEG minima: SOI, APP0, SOF con le componenti indicate, EOI.
+    function header(sofMarker, w, h, comps) {
+      var app0 = [0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01, 0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00];
+      var len = 8 + comps.length * 3;
+      var sof = [0xFF, sofMarker, len >> 8, len & 255, 8, h >> 8, h & 255, w >> 8, w & 255, comps.length];
+      comps.forEach(function (c, i) { sof.push(i + 1, c, 0); });
+      return new Uint8Array([0xFF, 0xD8].concat(app0, sof, [0xFF, 0xD9]));
+    }
+
+    checkAsync('Whatsapp.degrade porta A-ombra 2400x1800 al lato lungo 1600', function () {
+      var m = bigSynth();
+      return Whatsapp.degrade(m.canvas).then(function (out) {
+        if (!(out instanceof HTMLCanvasElement)) return 'non restituisce un canvas';
+        if (m.canvas.width !== 2400 || m.canvas.height !== 1800) return 'l\'ingresso è stato modificato';
+        return (out.width === 1600 && out.height === 1200) ? true : out.width + 'x' + out.height;
+      });
+    });
+    checkAsync('Whatsapp.degrade non ingrandisce un\'immagine più piccola di 1600 px', function () {
+      var m = Synth.make(Synth.cases['A-ombra']);
+      return Whatsapp.degrade(m.canvas).then(function (out) {
+        return (out.width === 800 && out.height === 600) ? true : out.width + 'x' + out.height;
+      });
+    });
+    checkAsync('Whatsapp.degrade rifa il passaggio JPEG: i pixel cambiano e restano vicini', function () {
+      var m = Synth.make(Synth.cases['A-ombra']);
+      return Whatsapp.degrade(m.canvas).then(function (out) {
+        var a = m.canvas.getContext('2d').getImageData(0, 0, 800, 600).data;
+        var b = out.getContext('2d').getImageData(0, 0, out.width, out.height).data;
+        var diff = 0, sum = 0;
+        for (var i = 0; i < a.length; i += 4) {
+          var d = Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]);
+          if (d) diff++;
+          sum += d / 3;
+        }
+        if (!diff) return 'nessun pixel cambiato: manca la compressione';
+        var mean = sum / (a.length / 4);
+        return mean < 12 ? true : 'differenza media troppo alta: ' + mean.toFixed(2);
+      });
+    });
+    checkAsync('jpegInfo sui byte di toBlob a 0,65 riporta misure e 4:2:0 (altrimenti avviso)', function () {
+      var m = bigSynth();
+      return jpegBytes(m.canvas, 0.65).then(function (bytes) {
+        var info = Whatsapp.jpegInfo(bytes);
+        if (info.w !== 2400 || info.h !== 1800) return 'misure ' + info.w + 'x' + info.h;
+        if (info.ySampling !== '2x2') {
+          // Il browser non produce 4:2:0 a questa qualità: il simulatore resta valido ma
+          // la prova di fedelta cade. Si segnala, non si boccia il banco.
+          warnings.push('toBlob a qualità 0,65 produce ySampling ' + info.ySampling + ' invece di 2x2');
+        }
+        return true;
+      });
+    });
+    check('jpegInfo legge SOF0 con campionamento 2x2', function () {
+      var i = Whatsapp.jpegInfo(header(0xC0, 640, 480, [0x22, 0x11, 0x11]));
+      return (i.w === 640 && i.h === 480 && i.ySampling === '2x2') ? true : JSON.stringify(i);
+    });
+    check('jpegInfo legge SOF2 (progressivo) con campionamento 1x1', function () {
+      var i = Whatsapp.jpegInfo(header(0xC2, 300, 200, [0x11, 0x11, 0x11]));
+      return (i.w === 300 && i.h === 200 && i.ySampling === '1x1') ? true : JSON.stringify(i);
+    });
+    check('jpegInfo legge un campionamento 2x1', function () {
+      return Whatsapp.jpegInfo(header(0xC0, 10, 10, [0x21, 0x11, 0x11])).ySampling === '2x1' ? true : 'diverso';
+    });
+    check('jpegInfo rifiuta byte che non sono un JPEG', function () {
+      try { Whatsapp.jpegInfo(new Uint8Array([0x89, 0x50, 0x4E, 0x47])); } catch (e) { return (e instanceof Error && !(e instanceof ReferenceError)) ? true : 'errore inatteso: ' + e; }
+      return 'non ha rifiutato';
+    });
+    check('jpegInfo rifiuta un JPEG senza SOF', function () {
+      try { Whatsapp.jpegInfo(new Uint8Array([0xFF, 0xD8, 0xFF, 0xD9])); } catch (e) { return (e instanceof Error && !(e instanceof ReferenceError)) ? true : 'errore inatteso: ' + e; }
+      return 'non ha rifiutato';
+    });
+  }
+
+  function run(loaded) {
+    var win = document.getElementById('app').contentWindow;
+    var sf = win && win.ScanForge;
+    if (!loaded) {
+      check('iframe caricato', function () { return 'timeout: index.html non ha finito di caricare'; });
+    }
+
+    window.SF_API_MANIFEST.forEach(function (m) {
+      check('esiste ' + m.path + ' (' + m.type + ')', function () {
+        if (!sf) return 'ScanForge non definito';
+        var v = resolve(sf, m.path);
+        // typeof null e 'object': per i tipi 'object' escludo null
+        if (m.type === 'object' && v === null) return 'null';
+        return typeof v === m.type ? true : 'trovato ' + typeof v;
+      });
+    });
+
+    check('apiVersion === 1', function () {
+      return (sf && sf.apiVersion === 1) ? true : 'valore ' + (sf && sf.apiVersion);
+    });
+    check('version inizia per 0.3', function () {
+      var v = sf && sf.version;
+      return (typeof v === 'string' && v.indexOf('0.3') === 0) ? true : 'valore ' + v;
+    });
+
+    check('nessun attributo on* nel documento', function () {
+      var doc = win && win.document;
+      if (!doc) return 'documento non disponibile';
+      var trovati = [];
+      var all = doc.querySelectorAll('*');
+      for (var i = 0; i < all.length; i++) {
+        var attrs = all[i].attributes;
+        for (var j = 0; j < attrs.length; j++) {
+          if (/^on/i.test(attrs[j].name)) trovati.push(all[i].tagName.toLowerCase() + '[' + attrs[j].name + ']');
+        }
+      }
+      // Elementi creati a runtime da template di stringhe nello script dell'app
+      var app = doc.getElementById('sf-app');
+      if (!app) return 'script sf-app non trovato';
+      var re = /\son[a-z]+=["']/gi, m;
+      while ((m = re.exec(app.textContent))) trovati.push('sf-app:' + m[0].trim());
+      return trovati.length ? 'trovati: ' + trovati.slice(0, 5).join(', ') : true;
+    });
+
+    // Le prove sulle preferenze rimettono il valore salvato che trovano, invece di cancellarlo.
+    function conPrefs(fn) {
+      var prefs = win && win.prefs;
+      if (!prefs || typeof prefs.get !== 'function' || typeof prefs.set !== 'function') return 'prefs non disponibile';
+      var proto = win.Storage.prototype, get = proto.getItem, set = proto.setItem;
+      var KEY = 'scanforge.prefs.v1', salvato = null;
+      try { salvato = win.localStorage.getItem(KEY); win.localStorage.removeItem(KEY); } catch (e) { /* archiviazione assente */ }
+      var splitPrima = prefs.get('split');
+      try {
+        return fn(prefs, proto);
+      } finally {
+        proto.getItem = get;
+        proto.setItem = set;
+        prefs.set('split', splitPrima);
+        try {
+          if (salvato === null) win.localStorage.removeItem(KEY);
+          else win.localStorage.setItem(KEY, salvato);
+        } catch (e) { /* archiviazione assente */ }
+      }
+    }
+    function lancia(nome) {
+      return function () { throw new win.DOMException('bloccato', nome); };
+    }
+
+    // Campo Progetto (nome del progetto): pannello del PC e schermata Esporta del telefono
+    check('campo Progetto: presente, obbligatorio e prima di Cognome nel pannello e in Esporta', function () {
+      var d = win.document;
+      var coppie = [['nm-progetto', 'nm-cognome'], ['exp-progetto', 'exp-cognome']];
+      for (var i = 0; i < coppie.length; i++) {
+        var prog = d.getElementById(coppie[i][0]), cog = d.getElementById(coppie[i][1]);
+        if (!prog) return coppie[i][0] + ' assente';
+        if (prog.dataset.campo !== 'title') return coppie[i][0] + ' non è collegato a title';
+        if (prog.getAttribute('aria-required') !== 'true') return coppie[i][0] + ' senza aria-required';
+        if (prog.maxLength !== 80) return coppie[i][0] + ' maxlength ' + prog.maxLength;
+        if (!(prog.compareDocumentPosition(cog) & win.Node.DOCUMENT_POSITION_FOLLOWING)) return coppie[i][0] + ' non precede Cognome';
+        if (!d.querySelector('label[for="' + coppie[i][0] + '"]')) return coppie[i][0] + ' senza etichetta';
+      }
+      return true;
+    });
+    check('campo Progetto: il nome scritto va in intestazione e vuoto torna il proposto', function () {
+      var d = win.document;
+      var ev = function (name) { return new win.Event(name, { bubbles: true }); };
+      var campo = d.getElementById('exp-progetto');
+      var testa = d.getElementById('hdr-name');
+      if (!campo || !testa) return 'elementi assenti';
+      try {
+        campo.value = 'Contratto Casa Milano';
+        campo.dispatchEvent(ev('input'));
+        if (testa.textContent !== 'Contratto Casa Milano') return 'intestazione: ' + testa.textContent;
+        if (d.getElementById('nm-progetto').value !== 'Contratto Casa Milano') return 'pannello non allineato';
+        campo.value = '   ';
+        campo.dispatchEvent(ev('input'));
+        campo.dispatchEvent(ev('blur'));
+        if (campo.value !== 'Progetto') return 'dopo aver svuotato: ' + JSON.stringify(campo.value);
+        if (testa.textContent !== 'Nuovo progetto') return 'intestazione vuota: ' + testa.textContent;
+        return true;
+      } finally {
+        campo.value = '';
+        campo.dispatchEvent(ev('input'));
+        campo.dispatchEvent(ev('blur'));
+      }
+    });
+
+    // Riga Tipo della colonna destra (e del telefono): cambia il tipo del documento o ne crea uno
+    // con la sola foto da assegnare. Le prove girano una dopo l'altra sull'unica app dell'iframe.
+    var codaTipo = Promise.resolve();
+    function checkTipo(name, fn) {
+      checkAsync(name, function () {
+        var r = codaTipo.then(fn);
+        codaTipo = r.then(function () {}, function () {});
+        return r;
+      });
+    }
+    function attendi(cond, ms) {
+      var fine = Date.now() + (ms || 6000);
+      return new Promise(function (ok, ko) {
+        (function giro() {
+          if (cond()) return ok();
+          if (Date.now() > fine) return ko(new Error('timeout'));
+          setTimeout(giro, 25);
+        })();
+      });
+    }
+    var PNG1 = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+    function preparaTipo(docs, nUn, aperta) {
+      // docs: [{ typeId, n }]; le pagine sono t1, t2, ...; aperta: id della pagina mostrata in Correggi
+      win.eval('(' + function (docs, nUn, aperta, png) {
+        clearPractice();
+        var k = 0, documents = [], unassigned = [];
+        var pagina = function () {
+          var id = 't' + (++k);
+          state.pages.set(id, { id: id, originalSrc: png, name: id, settings: ScanForge.defaultSettings(), corners: null, width: 1, height: 1, needsCheck: false });
+          return id;
+        };
+        docs.forEach(function (d, i) {
+          var ids = []; for (var j = 0; j < d.n; j++) ids.push(pagina());
+          documents.push({ id: 'd' + (i + 1), typeId: d.typeId, mode: null, pageIds: ids });
+        });
+        for (var u = 0; u < nUn; u++) unassigned.push(pagina());
+        commit({ title: '', cognome: '', nome: '', documents: documents, unassigned: unassigned });
+        selectPage(aperta);
+      } + ')')(docs, nUn, aperta, PNG1);
+    }
+    function statoTipo() {
+      return JSON.parse(win.eval('JSON.stringify({ overlay: state.overlay, docId: state.docId, pageId: state.pageId, ' +
+        'documents: state.practice.documents, unassigned: state.practice.unassigned })'));
+    }
+    // Chiude la scelta aperta (così la cronologia dell'app resta coerente), poi svuota il progetto.
+    function conPulizia(fn) {
+      var fine = function () {
+        return win.eval('closeOverlayThen()').then(function () { win.eval('clearPractice(); go("pratica", { replace: true })'); });
+      };
+      return Promise.resolve().then(fn).then(function (r) {
+        return fine().then(function () { return r; });
+      }, function (e) {
+        return fine().then(function () { throw e; });
+      });
+    }
+    function scegli(tipo) {
+      var c = win.document.querySelector('#tp-types .chip[data-type="' + tipo + '"]');
+      if (!c) return Promise.reject(new Error('chip ' + tipo + ' assente'));
+      c.click();
+      return attendi(function () { return statoTipo().overlay === null; }).catch(function () {
+        throw new Error('la scelta non si è chiusa: ' + win.eval('state.overlay + "|" + state.depth + "|" + state.view + "|" + history.length'));
+      });
+    }
+    checkTipo('riga Tipo: è un pulsante con etichetta accessibile e apre la scelta del tipo', function () {
+      return conPulizia(function () {
+        preparaTipo([{ typeId: 'contratto', n: 2 }], 0, 't1');
+        var b = win.document.getElementById('tools-type');
+        if (!b || b.tagName !== 'BUTTON') return 'non è un pulsante';
+        if (b.getAttribute('aria-haspopup') !== 'dialog') return 'senza aria-haspopup';
+        if (b.getAttribute('aria-label') !== 'Tipo: Contratto, cambia') return 'etichetta ' + b.getAttribute('aria-label');
+        if (win.document.getElementById('tools-type-label').textContent !== 'Contratto') return 'testo';
+        b.click();
+        if (statoTipo().overlay !== 'tipo') return 'scelta non aperta: ' + statoTipo().overlay;
+        if (win.document.getElementById('tp-title').textContent !== 'Tipo del documento') return 'titolo ' + win.document.getElementById('tp-title').textContent;
+        var cur = win.document.querySelector('#tp-types .chip[data-type="contratto"]');
+        if (!cur || cur.getAttribute('aria-pressed') !== 'true') return 'tipo attuale non segnato';
+        return true;
+      });
+    });
+    checkTipo('riga Tipo: scegliere un altro tipo cambia il tipo del documento', function () {
+      return conPulizia(function () {
+        preparaTipo([{ typeId: 'contratto', n: 1 }], 0, 't1');
+        win.document.getElementById('tools-type').click();
+        return scegli('fattura').then(function () {
+          var st = statoTipo();
+          if (st.documents.length !== 1 || st.documents[0].typeId !== 'fattura') return 'tipo ' + JSON.stringify(st.documents);
+          return true;
+        });
+      });
+    });
+    checkTipo('riga Tipo: una foto da assegnare diventa un documento con quella sola foto', function () {
+      return conPulizia(function () {
+        preparaTipo([], 2, 't1');
+        var b = win.document.getElementById('tools-type');
+        if (b.getAttribute('aria-label') !== 'Tipo: Da assegnare, scegli') return 'etichetta ' + b.getAttribute('aria-label');
+        b.click();
+        var titolo = win.document.getElementById('tp-title').textContent;
+        return scegli('contratto').then(function () {
+          if (titolo !== 'Crea documento con 1 foto') return 'titolo ' + titolo;
+          var st = statoTipo();
+          if (st.documents.length !== 1 || JSON.stringify(st.documents[0].pageIds) !== '["t1"]') return 'documenti ' + JSON.stringify(st.documents);
+          if (st.documents[0].typeId !== 'contratto') return 'tipo ' + st.documents[0].typeId;
+          if (JSON.stringify(st.unassigned) !== '["t2"]') return 'restano ' + JSON.stringify(st.unassigned);
+          if (st.docId !== st.documents[0].id) return 'Correggi non segue il nuovo documento: ' + st.docId;
+          return true;
+        });
+      });
+    });
+    checkTipo('riga Tipo: le tessere sono disabilitate per un documento di tre pagine', function () {
+      return conPulizia(function () {
+        preparaTipo([{ typeId: 'contratto', n: 3 }], 0, 't1');
+        win.document.getElementById('tools-type').click();
+        var c = win.document.querySelector('#tp-types .chip[data-type="cie"]');
+        if (!c || !c.disabled) return 'la tessera non è disabilitata';
+        return true;
+      });
+    });
+    checkTipo('riga Tipo: la scelta del tipo per le foto selezionate resta com\u2019era', function () {
+      return conPulizia(function () {
+        preparaTipo([], 3, 't1');
+        win.eval('selection.add("t1"); selection.add("t2"); openTypeChooser()');
+        if (statoTipo().overlay !== 'tipo') return 'scelta non aperta';
+        if (win.document.getElementById('tp-title').textContent !== 'Crea documento con 2 foto') return 'titolo ' + win.document.getElementById('tp-title').textContent;
+        return true;
+      });
+    });
+
+    // Nome del progetto: con "Uno per documento" ogni PDF modificabile porta il nome, e mentre si scrive
+    // nel campo i ridisegni non lo sovrascrivono con la proposta.
+    checkTipo('nome del progetto: projectBytes di un gruppo e del progetto intero conservano title', function () {
+      return conPulizia(function () {
+        preparaTipo([{ typeId: 'contratto', n: 1 }, { typeId: 'fattura', n: 1 }], 0, 't1');
+        win.eval('commit(Object.assign({}, state.practice, { title: "Contratto Casa Milano" }))');
+        var leggi = function (b) { return win.ScanForge.io.parseProject(new win.TextDecoder().decode(b)).practice; };
+        var gruppo = leggi(win.eval('projectBytes({ items: [{ pageId: "t1" }], docIds: ["d1"] })'));
+        if (gruppo.title !== 'Contratto Casa Milano') return 'gruppo: ' + JSON.stringify(gruppo.title);
+        if (gruppo.documents.length !== 1) return 'gruppo con ' + gruppo.documents.length + ' documenti';
+        var intero = leggi(win.eval('projectBytes()'));
+        if (intero.title !== 'Contratto Casa Milano') return 'intero: ' + JSON.stringify(intero.title);
+        return true;
+      });
+    });
+    checkTipo('campo Progetto: con il fuoco non si sovrascrive, uscendo torna la proposta', function () {
+      return conPulizia(function () {
+        preparaTipo([{ typeId: 'contratto', n: 1 }], 0, 't1');
+        var ev = function (name) { return new win.Event(name, { bubbles: true }); };
+        var campo = win.document.getElementById('exp-progetto');
+        win.eval('commit(Object.assign({}, state.practice, { title: "Mio" }))');
+        win.eval('go("esporta")');
+        campo.focus();
+        if (win.document.activeElement !== campo) return 'il campo non ha preso il fuoco';
+        campo.value = '';
+        campo.dispatchEvent(ev('input'));
+        win.eval('render()');
+        if (campo.value !== '') return 'sovrascritto mentre si scrive: ' + JSON.stringify(campo.value);
+        campo.blur();
+        campo.dispatchEvent(ev('blur'));
+        if (campo.value !== 'Contratto') return 'dopo il fuoco: ' + JSON.stringify(campo.value);
+        return true;
+      });
+    });
+
+    // Regola: interruttori Specchia e Bilanciamento del bianco (valori di fabbrica non scritti nelle impostazioni)
+    function impostazioniDi(id) { return JSON.parse(win.eval('JSON.stringify(state.pages.get("' + id + '").settings)')); }
+    function modoPagina(id, mode, docType) {
+      win.eval('(function () { var p = state.pages.get("' + id + '"); p.settings = Object.assign({}, p.settings, { mode: "' + mode + '", docType: "' + docType + '" }); render(); })()');
+    }
+    checkTipo('Regola: Specchia in orizzontale e in verticale alternano e si scrivono solo se attivi', function () {
+      return conPulizia(function () {
+        preparaTipo([{ typeId: 'contratto', n: 1 }], 0, 't1');
+        modoPagina('t1', 'grigi', 'foglio');
+        var d = win.document;
+        var ids = ['rg-flipH', 'rg-flipV'], chiavi = ['flipH', 'flipV'];
+        for (var i = 0; i < 2; i++) {
+          var b = d.getElementById(ids[i]);
+          if (!b || b.getAttribute('role') !== 'switch') return ids[i] + ' non è un interruttore';
+          if (!d.getElementById(ids[i] + '-l') || d.getElementById(ids[i] + '-l').textContent.indexOf('Specchia') !== 0) return ids[i] + ' senza etichetta';
+          if (b.getAttribute('aria-checked') !== 'false') return ids[i] + ' acceso in partenza';
+          b.click();
+          if (impostazioniDi('t1')[chiavi[i]] !== true || b.getAttribute('aria-checked') !== 'true') return ids[i] + ' non si accende';
+        }
+        d.getElementById('rg-flipH').click();
+        var s = impostazioniDi('t1');
+        if ('flipH' in s) return 'flipH spento resta scritto: ' + JSON.stringify(s.flipH);
+        if (s.flipV !== true) return 'flipV perso';
+        d.querySelector('[data-reset="geometria"]').click();
+        s = impostazioniDi('t1');
+        if ('flipV' in s || d.getElementById('rg-flipV').getAttribute('aria-checked') !== 'false') return 'Ripristina non spegne lo specchio';
+        return true;
+      });
+    });
+    checkTipo('Regola: il bilanciamento del bianco compare per le tessere in Colori e si spegne con false', function () {
+      return conPulizia(function () {
+        preparaTipo([{ typeId: 'cie', n: 1 }], 0, 't1');
+        var d = win.document, riga = d.querySelector('.rg-row[data-row="bilanciaBianco"]'), b = d.getElementById('rg-bilanciaBianco');
+        if (!riga || !b) return 'riga assente';
+        modoPagina('t1', 'colori', 'identita');
+        if (riga.hidden) return 'nascosta per una tessera in Colori';
+        if (b.getAttribute('aria-checked') !== 'true') return 'spento in partenza';
+        b.click();
+        if (impostazioniDi('t1').bilanciaBianco !== false || b.getAttribute('aria-checked') !== 'false') return 'non si spegne';
+        b.click();
+        if ('bilanciaBianco' in impostazioniDi('t1')) return 'acceso resta scritto';
+        modoPagina('t1', 'grigi', 'identita');
+        if (!riga.hidden) return 'visibile in Grigi';
+        modoPagina('t1', 'colori', 'foglio');
+        if (!riga.hidden) return 'visibile per un foglio';
+        return true;
+      });
+    });
+
+    check('prefs funziona con localStorage che lancia', function () {
+      return conPrefs(function (prefs, proto) {
+        proto.getItem = lancia('SecurityError');
+        proto.setItem = lancia('SecurityError');
+        if (prefs.get('split') !== false) return 'split ' + prefs.get('split');
+        if (prefs.get('theme') !== 'system') return 'theme ' + prefs.get('theme');
+        if (prefs.get('editablePdf') !== false) return 'editablePdf ' + prefs.get('editablePdf');
+        prefs.set('split', true);
+        // La scelta vale almeno per la sessione anche senza archiviazione
+        if (prefs.get('split') !== true) return 'set senza archiviazione perso';
+        return true;
+      });
+    });
+
+    check('prefs tiene il valore se solo la scrittura fallisce', function () {
+      return conPrefs(function (prefs, proto) {
+        proto.setItem = lancia('QuotaExceededError');
+        prefs.set('split', true);
+        if (prefs.get('split') !== true) return 'split ' + prefs.get('split') + ' dopo set fallito';
+        return true;
+      });
+    });
+
+    ioTests(sf, win);
+    convertTests(sf, win);
+    whatsappTests();
+    topLevelTests(sf, win);
+
+    return Promise.all(pending).then(render);
+  }
+
+  function render() {
+    var pass = rows.filter(function (r) { return r.ok; }).length;
+    var fail = rows.length - pass;
+    var tbody = document.querySelector('#results tbody');
+    rows.forEach(function (r) {
+      var tr = document.createElement('tr');
+      [r.name, r.ok ? 'OK' : 'KO', r.detail].forEach(function (txt, i) {
+        var td = document.createElement('td');
+        td.textContent = txt;
+        if (i === 1) td.className = r.ok ? 'pass' : 'fail';
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    });
+    document.getElementById('summary').textContent = 'Passati: ' + pass + ' - Falliti: ' + fail;
+    window.__api = { summary: { pass: pass, fail: fail }, failures: failures, warnings: warnings };
+    if (warnings.length) {
+      var w = document.createElement('p');
+      w.id = 'warnings';
+      w.textContent = 'Avvisi: ' + warnings.join('; ');
+      document.body.appendChild(w);
+    }
+    var fine = document.createElement('p');
+    fine.textContent = 'FINE';
+    document.body.appendChild(fine);
+  }
+
+  // Il load dell'iframe può essere già scattato prima di questo script: si controlla readyState,
+  // e un tetto di 15 s garantisce che la pagina arrivi comunque a FINE.
+  var frame = document.getElementById('app');
+  var done = false, timer = null;
+  function go(loaded) {
+    if (done) return;
+    done = true;
+    clearTimeout(timer);
+    new Promise(function (res) { res(run(loaded)); }).catch(function (e) {
+      check('errore del contratto', function () { return String(e && e.message || e); });
+      render();
+    });
+  }
+  timer = setTimeout(function () { go(false); }, 15000);
+  var cd = null;
+  try { cd = frame.contentDocument; } catch (e) { cd = null; }
+  if (cd && cd.readyState === 'complete' && frame.contentWindow.location.pathname === '/index.html') go(true);
+  else frame.addEventListener('load', function () { go(true); });
+})();
+</script>
+</body>
+</html>

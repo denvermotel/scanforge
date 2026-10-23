@@ -1,0 +1,606 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ScanForge - giudizio dei risultati</title>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 24px; color: #222; background: #fff; }
+  h1 { margin-top: 0; }
+  h2 { margin: 16px 0 4px; font-size: 18px; }
+  .row { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: end; margin-bottom: 12px; }
+  label { display: flex; flex-direction: column; font-size: 13px; gap: 4px; }
+  button, select, input, textarea { font: inherit; padding: 4px 8px; }
+  button[aria-pressed="true"] { background: #1a237e; color: #fff; border-color: #1a237e; }
+  #status { min-height: 1.5em; font-weight: 600; }
+  .ok { color: #0a7a2f; }
+  .err { color: #b00020; }
+  .hint { color: #555; font-size: 13px; max-width: 78ch; }
+  #totali { font-weight: 600; min-height: 1.5em; }
+  #conta { font-weight: 600; min-width: 14ch; }
+  code { background: #f0f0f0; padding: 0 4px; }
+  [hidden] { display: none !important; }
+  #istruzioni { background: #f6f6f6; border: 1px solid #ddd; padding: 8px 14px; max-width: 78ch; margin-bottom: 12px; }
+  #origBox { display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: flex-start; margin-bottom: 12px; }
+  #cvOrig { display: block; max-width: 100%; border: 1px solid #ccc; background: #f4f4f4; }
+  #infoOrig { font-size: 13px; color: #444; max-width: 52ch; }
+  #infoOrig p { margin: 0 0 6px; }
+  #celle { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(420px, 100%), 1fr)); gap: 16px; }
+  .cella { border: 1px solid #ddd; border-left: 8px solid #999; background: #fafafa; padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+  .cella.prop { border-left-color: #1a237e; }
+  .cella h3 { margin: 0; font-size: 16px; }
+  .cella .tag { font-size: 12px; font-weight: 600; color: #1a237e; margin-left: 6px; }
+  .cella .meta { font-size: 12px; color: #555; min-height: 1.4em; }
+  .view { border: 1px solid #ccc; background: #f4f4f4; min-height: 80px; overflow: auto; max-height: 75vh; text-align: center; }
+  .view canvas { display: block; margin: 0 auto; max-width: 100%; max-height: 70vh; }
+  .view.z100 canvas { max-width: none; max-height: none; margin: 0; }
+  .view .msg { padding: 28px 12px; font-weight: 600; color: #555; }
+  .view .msg.err { color: #b00020; }
+  .tools, .voto { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .tools button { user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+  .voto textarea { flex: 1 1 100%; min-height: 3.2em; resize: vertical; }
+  .voto .req { font-size: 12px; color: #555; }
+</style>
+</head>
+<body>
+<h1>Giudizio dei risultati</h1>
+<p class="hint">Per ogni foto annotata la pagina mostra l'originale e le quattro modalità elaborate con il preset
+predefinito del tipo (<code>identita-*</code> per le tessere, <code>foglio-*</code> per i fogli). Il voto richiesto è uno
+solo, quello sulla modalità proposta (colori per le tessere, grigi per i fogli); gli altri voti e le note sono facoltativi.
+La nota si salva insieme al voto. Il giudizio si scrive solo in <code>dev/materiale/banco/giudizi.json</code>.
+<button type="button" id="comeSiUsa" aria-expanded="false" aria-controls="istruzioni">Come si usa</button></p>
+<div id="istruzioni" class="hint" hidden>
+  <p>Tieni premuto <em>Prima/dopo</em> per vedere, nella stessa cella, la pagina raddrizzata senza alcun trattamento
+  (per la cella Originale, la foto intera): rilasciando torni al risultato. <em>Zoom 100%</em> mostra i pixel reali,
+  con la barra di scorrimento. Una modalità non ancora implementata dal programma dice &laquo;non disponibile&raquo; e non
+  si può votare: la pagina la riprova da sola a ogni caricamento.</p>
+  <p>I voti si salvano con <em>Salva giudizi</em> e anche passando a un'altra foto. Lo strumento non carica nulla su
+  servizi esterni, ma la cartella <code>dev/materiale</code> potrebbe essere sincronizzata dal client OneDrive: se usi
+  foto vere, escludi <code>dev/materiale/banco/foto</code> dalla sincronizzazione.</p>
+</div>
+
+<div class="row">
+  <label>Foto
+    <select id="elenco"><option value="">(nessuna)</option></select>
+  </label>
+  <button type="button" id="prec">Precedente</button>
+  <button type="button" id="succ">Successiva</button>
+  <button type="button" id="prossima">Prossima da giudicare</button>
+  <button type="button" id="salva">Salva giudizi</button>
+  <span id="conta" role="status"></span>
+</div>
+<p id="status" role="status" aria-live="polite"></p>
+<p id="totali" role="status"></p>
+
+<h2 id="titolo"></h2>
+<div id="origBox" hidden>
+  <canvas id="cvOrig" width="10" height="10" role="img" aria-label="Foto originale con il contorno annotato"></canvas>
+  <div id="infoOrig"></div>
+</div>
+<div id="celle"></div>
+<iframe id="app" title="ScanForge" tabindex="-1" aria-hidden="true"
+  style="position:absolute;left:-9999px;top:0;width:800px;height:600px;border:0"></iframe>
+
+<script src="lib/metrics.js"></script>
+<script src="lib/rotate.js"></script>
+<script>
+(function () {
+  var GT_URL = '/dev/materiale/banco/ground-truth.json';
+  var GIUDIZI_URL = '/dev/materiale/banco/giudizi.json';
+  var FOTO_DIR = '/dev/materiale/banco/foto/';
+  var APP_URL = '../index.html';
+  var MAX_NOTA = 500;
+  // Ordine di visualizzazione. "originale" si elabora per prima: serve da "prima" delle altre.
+  var MODI = [['colori', 'Colori'], ['grigi', 'Grigi'], ['bn', 'Bianco e nero'], ['originale', 'Originale']];
+  var ORDINE_ELAB = ['originale', 'colori', 'grigi', 'bn'];
+  var TIPI = { cie: "Carta d'identità elettronica (CIE)", patente: 'Patente', ts: 'Tessera sanitaria', passaporto: 'Passaporto' };
+
+  var elElenco = document.getElementById('elenco'), elStatus = document.getElementById('status');
+  var elConta = document.getElementById('conta'), elTotali = document.getElementById('totali');
+  var elTitolo = document.getElementById('titolo'), elCelle = document.getElementById('celle');
+  var elOrigBox = document.getElementById('origBox'), cvOrig = document.getElementById('cvOrig');
+  var elInfo = document.getElementById('infoOrig');
+  var btnPrec = document.getElementById('prec'), btnSucc = document.getElementById('succ');
+  var btnProssima = document.getElementById('prossima'), btnSalva = document.getElementById('salva');
+
+  // entries: voci di ground-truth.json; votes[file][modo] = { voto, nota }; cur: stato della foto aperta
+  // (cur.cells per modo, cur.before = pixel della pagina raddrizzata senza trattamento).
+  var st = { entries: [], i: -1, votes: {}, dirty: false, token: 0, cur: null, sf: null, saving: null };
+
+  function say(msg, ok) {
+    elStatus.textContent = msg;
+    elStatus.className = ok === true ? 'ok' : (ok === false ? 'err' : '');
+  }
+
+  function clone(o) { return JSON.parse(JSON.stringify(o)); }
+  function validName(n) {
+    return typeof n === 'string' && n.length > 0 && n.charAt(0) !== '.' && !/[\/\\\0]/.test(n);
+  }
+  function msgOf(e) { return (e && e.message) ? String(e.message) : String(e); }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  function btn(text) { var b = el('button', '', text); b.type = 'button'; return b; }
+  function modoLabel(m) { return MODI.filter(function (x) { return x[0] === m; })[0][1]; }
+  function fmtMs(ms) { return ms < 1000 ? Math.round(ms) + ' ms' : (ms / 1000).toFixed(1).replace('.', ',') + ' s'; }
+
+  // ---- motore: ScanForge nel riquadro nascosto (senza il caricamento dei caratteri da Google Fonts) ----
+  var motore = new Promise(function (resolve) {
+    var f = document.getElementById('app'), done = false;
+    function fin() {
+      if (done) return;
+      done = true;
+      var sf = null;
+      try { sf = f.contentWindow && f.contentWindow.ScanForge; } catch (e) { sf = null; }
+      var ok = sf && typeof sf.process === 'function' && sf.presets && typeof sf.defaultSettings === 'function' &&
+        sf.io && typeof sf.io.loadImage === 'function' && typeof sf.io.createOps === 'function';
+      resolve(ok ? sf : null);
+    }
+    var t = setTimeout(fin, 20000);
+    f.addEventListener('load', function () { clearTimeout(t); fin(); });
+    fetch(APP_URL, { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.text();
+    }).then(function (html) {
+      f.srcdoc = html.replace(/@import\s+url\([^)]*fonts\.googleapis\.com[^)]*\)\s*;?/g, '');
+    }).catch(function () { clearTimeout(t); fin(); });
+  });
+
+  // ---- tipo e preset ----
+  // Le tessere (tutti i tipi annotabili oggi) usano i preset identita-*, ogni altro tipo foglio-*.
+  function kindOf(tipo) { return TIPI[tipo] ? 'identita' : 'foglio'; }
+  function proposed(kind) { return kind === 'identita' ? 'colori' : 'grigi'; }
+
+  // Preset della modalità per il tipo: <tipo>-<modo>, "originale" per l'originale. Se non esiste
+  // (oggi il bianco e nero delle tessere) si parte da foglio-bn con il docType della tessera.
+  function presetFor(sf, kind, modo) {
+    var name = modo === 'originale' ? 'originale' : kind + '-' + modo, base = sf.presets[name], label = name;
+    if (!base && modo === 'bn' && sf.presets['foglio-bn']) {
+      base = Object.assign({}, sf.presets['foglio-bn'], { docType: kind });
+      label = 'foglio-bn con docType ' + kind;
+    }
+    if (!base) return null;
+    return { label: label, settings: Object.assign(sf.defaultSettings(), base) };
+  }
+
+  // ---- voti ----
+  function getVote(file, modo) {
+    return (st.votes[file] && st.votes[file][modo]) || null;
+  }
+  function setVote(file, modo, voto, nota) {
+    if (!st.votes[file]) st.votes[file] = {};
+    if (voto) st.votes[file][modo] = { voto: voto, nota: nota || '' };
+    else delete st.votes[file][modo];
+    st.dirty = true;
+  }
+
+  function kindOfEntry(e) {
+    var p = Metrics.parseEntry(e);
+    return p.error ? null : kindOf(p.riquadri[0].tipo);
+  }
+
+  function updateTotali() {
+    var ok = 0, no = 0, altri = 0, prop = 0, propOk = 0, valid = 0;
+    st.entries.forEach(function (e) {
+      var k = kindOfEntry(e);
+      if (!k) return;
+      valid++;
+      var pm = proposed(k);
+      MODI.forEach(function (m) {
+        var v = getVote(e.file, m[0]);
+        if (!v) return;
+        if (v.voto === 'ok') ok++; else no++;
+        if (m[0] === pm) { prop++; if (v.voto === 'ok') propOk++; } else altri++;
+      });
+    });
+    elTotali.textContent = st.entries.length
+      ? 'Modalità proposta giudicata su ' + prop + ' foto di ' + valid + ' (' + propOk + ' va bene, ' + (prop - propOk) +
+        ' non va bene). Voti in tutto: ' + (ok + no) + ' (' + ok + ' va bene, ' + no + ' non va bene), di cui ' + altri +
+        ' su altre modalità.'
+      : '';
+  }
+
+  function judged(e) {
+    var k = kindOfEntry(e);
+    return !!k && !!getVote(e.file, proposed(k));
+  }
+
+  // ---- elenco ----
+  function fillList() {
+    elElenco.textContent = '';
+    var o0 = el('option', '', st.entries.length ? '(scegli)' : '(nessuna)');
+    o0.value = '';
+    elElenco.appendChild(o0);
+    st.entries.forEach(function (e, i) {
+      var o = el('option', '', (i + 1) + '. ' + e.file + (judged(e) ? ' (giudicata)' : ''));
+      o.value = String(i);
+      elElenco.appendChild(o);
+    });
+    elElenco.value = st.i >= 0 ? String(st.i) : '';
+    elConta.textContent = st.entries.length ? (st.i >= 0 ? (st.i + 1) : '-') + ' di ' + st.entries.length : '';
+    btnPrec.disabled = st.i <= 0;
+    btnSucc.disabled = st.i < 0 || st.i >= st.entries.length - 1;
+    btnProssima.disabled = !st.entries.length;
+    updateTotali();
+  }
+
+  // ---- salvataggio ----
+  function giudiziList() {
+    var files = st.entries.map(function (e) { return e.file; });
+    Object.keys(st.votes).forEach(function (f) { if (files.indexOf(f) < 0) files.push(f); });
+    var out = [];
+    files.forEach(function (f) {
+      MODI.forEach(function (m) {
+        var v = getVote(f, m[0]);
+        if (!v) return;
+        var g = { file: f, modo: m[0], voto: v.voto };
+        if (v.nota) g.nota = v.nota;
+        out.push(g);
+      });
+    });
+    return out;
+  }
+
+  function salva() {
+    if (st.saving) return st.saving;
+    var list = giudiziList();
+    var p = fetch('/save-giudizi', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ giudizi: list })
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) throw new Error(j.error || ('HTTP ' + r.status));
+        st.dirty = false;
+        say('Salvati ' + list.length + ' giudizi in giudizi.json.', true);
+        return true;
+      });
+    }).catch(function (e) {
+      say('Salvataggio non riuscito: ' + msgOf(e), false);
+      return false;
+    }).then(function (ok) { st.saving = null; return ok; });
+    st.saving = p;
+    return p;
+  }
+
+  function loadJson(url) {
+    return fetch(url, { cache: 'no-store' }).then(function (r) {
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error('lettura di ' + url.split('/').pop() + ': HTTP ' + r.status);
+      return r.json();
+    });
+  }
+
+  // Giudizi già salvati: solo quelli di forma valida; il resto si scarta.
+  function applySaved(data) {
+    var list = data && Array.isArray(data.giudizi) ? data.giudizi : [];
+    list.forEach(function (g) {
+      if (!g || !validName(g.file) || !MODI.some(function (m) { return m[0] === g.modo; })) return;
+      if (g.voto !== 'ok' && g.voto !== 'no') return;
+      var nota = typeof g.nota === 'string' ? g.nota.slice(0, MAX_NOTA) : '';
+      if (!st.votes[g.file]) st.votes[g.file] = {};
+      st.votes[g.file][g.modo] = { voto: g.voto, nota: nota };
+    });
+  }
+
+  // ---- disegno ----
+  function paintImg(canvas, img) {
+    canvas.width = img.width; canvas.height = img.height;
+    canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(img.data), img.width, img.height), 0, 0);
+  }
+
+  // Foto intera già ruotata come da annotazione, a piena risoluzione (creata solo se serve).
+  function whole() {
+    var c = st.cur;
+    if (!c.wholeCv) c.wholeCv = Rotate.canvas(c.im, c.im.naturalWidth, c.im.naturalHeight, c.rot);
+    return c.wholeCv;
+  }
+
+  function drawOrig() {
+    var c = st.cur, d = Rotate.size(c.im.naturalWidth, c.im.naturalHeight, c.rot);
+    var k = Math.min(1, 420 / d.w, 420 / d.h);
+    cvOrig.width = Math.max(1, Math.round(d.w * k));
+    cvOrig.height = Math.max(1, Math.round(d.h * k));
+    var ctx = cvOrig.getContext('2d');
+    Rotate.draw(ctx, c.im, c.im.naturalWidth, c.im.naturalHeight, c.rot, cvOrig.width, cvOrig.height);
+    var q = c.quad, pts = [q.tl, q.tr, q.br, q.bl];
+    ctx.beginPath();
+    pts.forEach(function (p, j) {
+      var x = p.x / 100 * cvOrig.width, y = p.y / 100 * cvOrig.height;
+      j ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.closePath();
+    ctx.lineWidth = 3; ctx.strokeStyle = '#ffeb3b'; ctx.stroke();
+    ctx.lineWidth = 1; ctx.strokeStyle = '#000'; ctx.stroke();
+  }
+
+  // ---- celle ----
+  function setMsg(cell, text, isErr) {
+    cell.view.textContent = '';
+    cell.view.appendChild(el('div', 'msg' + (isErr ? ' err' : ''), text));
+    cell.dopo = null; cell.prima = null;
+  }
+
+  function refreshVoteUi(cell) {
+    var v = getVote(st.cur.file, cell.modo), usable = cell.state === 'ok';
+    cell.btnOk.disabled = !usable; cell.btnNo.disabled = !usable;
+    cell.btnOk.setAttribute('aria-pressed', v && v.voto === 'ok' ? 'true' : 'false');
+    cell.btnNo.setAttribute('aria-pressed', v && v.voto === 'no' ? 'true' : 'false');
+    cell.nota.disabled = !usable || !v;
+    if (document.activeElement !== cell.nota) cell.nota.value = v ? v.nota : '';
+  }
+
+  function vote(cell, voto) {
+    var file = st.cur.file, v = getVote(file, cell.modo);
+    if (v && v.voto === voto) setVote(file, cell.modo, null);       // un secondo clic toglie il voto
+    else setVote(file, cell.modo, voto, v ? v.nota : '');
+    refreshVoteUi(cell);
+    fillList();
+  }
+
+  function ensureBefore(cell) {
+    if (cell.beforeDrawn || !cell.prima) return;
+    var b = st.cur.before;
+    if (cell.modo !== 'originale' && b) {
+      paintImg(cell.prima, b);
+    } else {
+      var w = whole();
+      cell.prima.width = w.width; cell.prima.height = w.height;
+      cell.prima.getContext('2d').drawImage(w, 0, 0);
+    }
+    cell.beforeDrawn = true;
+  }
+
+  function holdBefore(cell, on) {
+    if (cell.state !== 'ok' || !cell.prima || !cell.dopo) return;
+    if (on) { ensureBefore(cell); cell.prima.hidden = false; cell.dopo.hidden = true; }
+    else { cell.prima.hidden = true; cell.dopo.hidden = false; }
+  }
+
+  function buildCell(modo, isProposed) {
+    var cell = { modo: modo, state: 'wait', dopo: null, prima: null, beforeDrawn: false };
+    var box = el('section', 'cella' + (isProposed ? ' prop' : ''));
+    var h = el('h3', '', modoLabel(modo));
+    h.appendChild(el('span', 'tag', isProposed ? 'modalità proposta' : ''));
+    box.appendChild(h);
+    cell.meta = el('div', 'meta', 'In attesa');
+    box.appendChild(cell.meta);
+    cell.view = el('div', 'view');
+    box.appendChild(cell.view);
+    setMsg(cell, 'Elaborazione in corso');
+
+    var tools = el('div', 'tools');
+    cell.btnPrima = btn('Prima/dopo (tieni premuto)');
+    cell.btnZoom = btn('Zoom 100%');
+    cell.btnZoom.setAttribute('aria-pressed', 'false');
+    tools.appendChild(cell.btnPrima); tools.appendChild(cell.btnZoom);
+    box.appendChild(tools);
+
+    var down = function () { holdBefore(cell, true); }, up = function () { holdBefore(cell, false); };
+    cell.btnPrima.addEventListener('pointerdown', down);
+    ['pointerup', 'pointerleave', 'pointercancel', 'blur'].forEach(function (ev) { cell.btnPrima.addEventListener(ev, up); });
+    cell.btnPrima.addEventListener('keydown', function (e) {
+      if ((e.key === ' ' || e.key === 'Enter') && !e.repeat) { e.preventDefault(); down(); }
+    });
+    cell.btnPrima.addEventListener('keyup', function (e) {
+      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); up(); }
+    });
+    cell.btnZoom.addEventListener('click', function () {
+      var on = cell.btnZoom.getAttribute('aria-pressed') !== 'true';
+      cell.btnZoom.setAttribute('aria-pressed', on ? 'true' : 'false');
+      cell.view.classList.toggle('z100', on);
+    });
+
+    var voto = el('div', 'voto');
+    cell.btnOk = btn('Va bene'); cell.btnNo = btn('Non va bene');
+    cell.btnOk.addEventListener('click', function () { vote(cell, 'ok'); });
+    cell.btnNo.addEventListener('click', function () { vote(cell, 'no'); });
+    voto.appendChild(cell.btnOk); voto.appendChild(cell.btnNo);
+    voto.appendChild(el('span', 'req', isProposed ? 'Voto richiesto' : 'Voto facoltativo'));
+    cell.nota = el('textarea');
+    cell.nota.maxLength = MAX_NOTA;
+    cell.nota.placeholder = 'Nota facoltativa (si salva con il voto)';
+    cell.nota.setAttribute('aria-label', 'Nota per ' + modoLabel(modo));
+    cell.nota.addEventListener('input', function () {
+      var v = getVote(st.cur.file, modo);
+      if (!v) return;
+      v.nota = cell.nota.value; st.dirty = true;
+    });
+    voto.appendChild(cell.nota);
+    box.appendChild(voto);
+
+    cell.box = box;
+    cell.btnPrima.disabled = true; cell.btnZoom.disabled = true;
+    refreshVoteUi(cell);
+    return cell;
+  }
+
+  function cellDone(cell, out, preset, ms) {
+    cell.state = 'ok';
+    cell.view.textContent = '';
+    cell.dopo = el('canvas'); cell.prima = el('canvas'); cell.prima.hidden = true;
+    paintImg(cell.dopo, out);
+    cell.view.appendChild(cell.dopo); cell.view.appendChild(cell.prima);
+    cell.meta.textContent = 'Preset ' + preset.label + ' - ' + out.width + ' x ' + out.height + ' px - ' + fmtMs(ms);
+    cell.btnPrima.disabled = false; cell.btnZoom.disabled = false;
+    refreshVoteUi(cell);
+  }
+
+  function cellFail(cell, preset, err) {
+    var m = msgOf(err);
+    if (/non ancora implementata/i.test(m)) {
+      cell.state = 'nd';
+      setMsg(cell, 'Modalità non disponibile', false);
+      cell.meta.textContent = 'Non ancora implementata dal programma';
+    } else {
+      cell.state = 'err';
+      setMsg(cell, 'Elaborazione non riuscita: ' + m, true);
+      cell.meta.textContent = preset ? 'Preset ' + preset.label : '';
+    }
+    cell.btnPrima.disabled = true; cell.btnZoom.disabled = true;
+    refreshVoteUi(cell);
+  }
+
+  // ---- foto aperta ----
+  function release() {
+    if (!st.cur) return;
+    Object.keys(st.cur.cells).forEach(function (m) {
+      var c = st.cur.cells[m];
+      [c.dopo, c.prima].forEach(function (cv) { if (cv) { cv.width = 1; cv.height = 1; } });
+    });
+    if (st.cur.wholeCv) { st.cur.wholeCv.width = 1; st.cur.wholeCv.height = 1; }
+    st.cur = null;
+  }
+
+  function clearView() {
+    release();
+    elCelle.textContent = '';
+    elOrigBox.hidden = true;
+    elInfo.textContent = '';
+    elTitolo.textContent = '';
+  }
+
+  function loadPhotoImage(name) {
+    return new Promise(function (resolve, reject) {
+      var im = new Image();
+      im.onload = function () { im.naturalWidth && im.naturalHeight ? resolve(im) : reject(new Error('immagine vuota')); };
+      im.onerror = function () { reject(new Error('foto non trovata o non leggibile')); };
+      im.src = FOTO_DIR + encodeURIComponent(name);
+    });
+  }
+
+  // Sorgente per ScanForge: l'indirizzo della foto se non ruotata, altrimenti la foto ruotata in PNG.
+  function sourceFor(rot, name) {
+    if (!rot) return Promise.resolve(FOTO_DIR + encodeURIComponent(name));
+    return new Promise(function (resolve, reject) {
+      whole().toBlob(function (b) { b ? resolve(b) : reject(new Error('rotazione non riuscita')); }, 'image/png');
+    });
+  }
+
+  function pause() { return new Promise(function (r) { setTimeout(r, 30); }); }
+
+  function runMode(sf, cur, img, ops, modo) {
+    var cell = cur.cells[modo], preset = presetFor(sf, cur.kind, modo);
+    if (!preset) { cellFail(cell, null, new Error('preset non trovato')); return; }
+    var t0 = performance.now();
+    try {
+      var out = sf.process(img, { corners: clone(cur.quad), settings: clone(preset.settings) }, ops);
+      if (modo === 'originale') cur.before = out;
+      cellDone(cell, out, preset, performance.now() - t0);
+    } catch (e) {
+      cellFail(cell, preset, e);
+    }
+  }
+
+  function show(i) {
+    if (i < 0 || i >= st.entries.length) return;
+    var prev = st.dirty ? salva() : Promise.resolve(true);
+    var my = ++st.token;
+    clearView();
+    st.i = i;
+    fillList();
+    var entry = st.entries[i], parsed = Metrics.parseEntry(entry);
+    elTitolo.textContent = (i + 1) + '. ' + (validName(entry && entry.file) ? entry.file : 'voce non valida');
+    if (parsed.error || !validName(entry.file)) {
+      say('Voce non valida: ' + (parsed.error || 'nome del file'), false);
+      return;
+    }
+    var first = parsed.riquadri[0], kind = kindOf(first.tipo), pm = proposed(kind);
+    var cur = { file: entry.file, rot: parsed.rotazione, quad: clone(first.quad), kind: kind, cells: {}, before: null, im: null, wholeCv: null };
+    st.cur = cur;
+    MODI.forEach(function (m) {
+      cur.cells[m[0]] = buildCell(m[0], m[0] === pm);
+      elCelle.appendChild(cur.cells[m[0]].box);
+    });
+    say('Caricamento della foto', undefined);
+
+    Promise.all([loadPhotoImage(entry.file), motore, prev]).then(function (r) {
+      if (my !== st.token) return;
+      var im = r[0], sf = r[1];
+      cur.im = im;
+      drawOrig();
+      elOrigBox.hidden = false;
+      elInfo.textContent = '';
+      var l1 = el('p', '', 'Tipo annotato: ' + (TIPI[first.tipo] || first.tipo) + (parsed.riquadri.length > 1
+        ? '. La foto ha ' + parsed.riquadri.length + ' riquadri: si giudica il primo.' : '.'));
+      var l2 = el('p', '', 'Preset: ' + kind + '-* (modalità proposta: ' + modoLabel(pm).toLowerCase() + ')'
+        + (cur.rot ? '. Rotazione annotata: ' + cur.rot + ' gradi.' : '.'));
+      var l3 = el('p', '', 'Il contorno giallo è quello annotato. Foto di ' + im.naturalWidth + ' x ' + im.naturalHeight + ' px.');
+      elInfo.appendChild(l1); elInfo.appendChild(l2); elInfo.appendChild(l3);
+      if (!sf) throw new Error('ScanForge non disponibile (index.html non si carica)');
+      var ops = sf.io.createOps();
+      say('Elaborazione delle modalità', undefined);
+      return sourceFor(cur.rot, entry.file).then(function (src) {
+        return sf.io.loadImage(src, { maxDim: Infinity });
+      }).then(function (img) {
+        var seq = Promise.resolve();
+        ORDINE_ELAB.forEach(function (modo) {
+          seq = seq.then(function () {
+            if (my !== st.token) return;
+            return pause().then(function () { if (my === st.token) runMode(sf, cur, img, ops, modo); });
+          });
+        });
+        return seq;
+      });
+    }).then(function () {
+      if (my === st.token) say('', undefined);
+    }).catch(function (e) {
+      if (my !== st.token) return;
+      say('Foto ' + entry.file + ': ' + msgOf(e), false);
+      Object.keys(cur.cells).forEach(function (m) {
+        var c = cur.cells[m];
+        if (c.state === 'wait') { c.state = 'err'; setMsg(c, 'Non elaborata', true); c.meta.textContent = ''; refreshVoteUi(c); }
+      });
+    });
+  }
+
+  function nextToJudge() {
+    var n = st.entries.length;
+    for (var k = 1; k <= n; k++) {
+      var j = (st.i + k + n) % n;
+      if (kindOfEntry(st.entries[j]) && !judged(st.entries[j])) return j;
+    }
+    return -1;
+  }
+
+  // ---- avvio ----
+  document.getElementById('comeSiUsa').addEventListener('click', function () {
+    var box = document.getElementById('istruzioni'), open = box.hidden;
+    box.hidden = !open;
+    this.setAttribute('aria-expanded', open ? 'true' : 'false');
+  });
+  elElenco.addEventListener('change', function () { if (elElenco.value !== '') show(parseInt(elElenco.value, 10)); });
+  btnPrec.addEventListener('click', function () { show(st.i - 1); });
+  btnSucc.addEventListener('click', function () { show(st.i + 1); });
+  btnSalva.addEventListener('click', function () { salva(); });
+  btnProssima.addEventListener('click', function () {
+    var j = nextToJudge();
+    if (j < 0) { say('Tutte le foto hanno già il voto sulla modalità proposta.', true); return; }
+    show(j);
+  });
+  window.addEventListener('beforeunload', function (e) {
+    if (st.dirty) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  Promise.all([loadJson(GT_URL), loadJson(GIUDIZI_URL).catch(function () { return null; })]).then(function (r) {
+    var gt = r[0];
+    if (gt !== null && !Array.isArray(gt)) throw new Error('ground-truth.json non è una lista');
+    st.entries = (gt || []).filter(function (e) { return e && typeof e === 'object'; });
+    applySaved(r[1]);
+    fillList();
+    if (!st.entries.length) {
+      say('Nessuna foto annotata: annota prima le foto con annota.html.', false);
+      return;
+    }
+    var j = nextToJudge();
+    show(j >= 0 ? j : 0);
+  }).catch(function (e) {
+    say('Lettura non riuscita: ' + msgOf(e), false);
+  });
+})();
+</script>
+</body>
+</html>

@@ -392,6 +392,8 @@
   .app-title h1 { font-size: 20px; line-height: 28px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .app-title p { font-size: 12px; line-height: 16px; color: var(--muted); font-variant-numeric: tabular-nums; }
   .spacer { flex: 1; }
+  [data-layout="pc"] .hdr-act { width: auto; padding: 0 var(--sp-3); }
+  .info-link, .info-link:visited { color: var(--accent); display: inline-flex; align-items: center; min-height: 44px; overflow-wrap: anywhere; }
   .practice-name { max-width: 320px; overflow: hidden; text-overflow: ellipsis; color: var(--text); }
 
   .app-main { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
@@ -523,7 +525,7 @@
     flex: 1; min-height: 0; position: relative; overflow: hidden;
     display: flex; align-items: center; justify-content: center;
     /* Sul telefono lo scorrimento orizzontale del dito cambia pagina */
-    touch-action: pan-y;
+    touch-action: pan-y pinch-zoom;
   }
   #canvas-zone.zoomed { overflow: auto; align-items: flex-start; justify-content: flex-start; touch-action: auto; }
   /* Prima (foto con i manici) e dopo (risultato): stesso riquadro, adatta o zoom */
@@ -566,6 +568,8 @@
   .tool-btn.danger { color: var(--danger); }
   .tools-label { font-size: 14px; line-height: 20px; font-weight: 500; margin-bottom: var(--sp-2); }
   .tools-type { display: flex; align-items: center; gap: var(--sp-2); }
+  button.tools-type { width: 100%; justify-content: flex-start; text-align: left; }
+  button.tools-type #tools-type-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .tools-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
   .tools-actions .btn-secondary { flex: 1; }
   .regola-toggle { width: 100%; justify-content: space-between; padding: 0; }
@@ -627,6 +631,7 @@
   .rg-row input:disabled { opacity: 0.4; cursor: not-allowed; }
   [data-layout="pc"] .rg-row { grid-template-columns: minmax(0, 1fr) auto; }
   [data-layout="pc"] .rg-row > input { grid-column: 1 / -1; grid-row: 2; height: var(--control-h); }
+  .rg-row.rg-switch, [data-layout="pc"] .rg-row.rg-switch { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-3); min-height: 44px; }
   /* Sul telefono il pannello lascia vedere la pagina: velo trasparente, pagina nello spazio libero */
   .scrim.is-clear { background: transparent; }
 
@@ -636,6 +641,31 @@
   .overlay-head .sheet-title, .overlay-head .dialog-title, .overlay-head h2 { margin-bottom: 0; }
   .overlay-body { display: flex; flex-direction: column; gap: var(--sp-4); }
   .overlay-dialog-name { width: min(400px, calc(100vw - 32px)); }
+
+  /* Impostazioni: sezioni separate da un divisorio */
+  .pref-body { gap: var(--sp-6); }
+  .pref-section { display: flex; flex-direction: column; gap: var(--sp-3); min-width: 0; }
+  .pref-section + .pref-section { padding-top: var(--sp-6); border-top: 1px solid var(--border); }
+  .pref-head { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+  .pref-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); }
+  .pref-actions > .btn { flex: 1 1 140px; }
+  .pref-preview { color: var(--muted); overflow-wrap: anywhere; }
+  .pref-error:empty { display: none; }
+  .pref-error { color: var(--danger); }
+  .pref-types { display: flex; flex-direction: column; gap: var(--sp-2); }
+  .type-row { display: grid; grid-template-columns: minmax(0, 1fr) 112px var(--control-h); align-items: center; gap: var(--sp-2); }
+  .type-row-name { min-width: 0; display: flex; flex-direction: column; }
+  .type-row-name > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .type-row input {
+    width: 100%; min-width: 0; min-height: var(--control-h); padding: 0 var(--sp-2);
+    border: 1px solid var(--border-strong); border-radius: var(--r-md);
+    background: var(--surface); color: var(--text); font-size: 16px; line-height: 24px;
+    transition: border-color var(--t-state) var(--ease);
+  }
+  .type-row input:focus { border-color: var(--accent); }
+  .type-row input[aria-invalid="true"] { border-color: var(--danger); }
+  .pref-new { display: flex; flex-direction: column; gap: var(--sp-3); padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--r-md); }
+  .pref-new > .btn { align-self: flex-start; }
 
   /* Domande e fotocamera: azioni in fondo; sul telefono una sotto l'altra, a tutta larghezza */
   .dialog-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--sp-2); }
@@ -766,6 +796,7 @@
   <symbol id="i-aggiungi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></symbol>
   <symbol id="i-riduci" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/></symbol>
   <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-impostazioni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M10.10 5.37L10.56 2.91L13.44 2.91L13.90 5.37L15.35 5.97L17.41 4.56L19.44 6.59L18.03 8.65L18.63 10.10L21.09 10.56L21.09 13.44L18.63 13.90L18.03 15.35L19.44 17.41L17.41 19.44L15.35 18.03L13.90 18.63L13.44 21.09L10.56 21.09L10.10 18.63L8.65 18.03L6.59 19.44L4.56 17.41L5.97 15.35L5.37 13.90L2.91 13.44L2.91 10.56L5.37 10.10L5.97 8.65L4.56 6.59L6.59 4.56L8.65 5.97z"/><circle cx="12" cy="12" r="2.6"/></symbol>
   <symbol id="i-indietro" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></symbol>
   <symbol id="i-avanti" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></symbol>
   <symbol id="i-chiudi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
@@ -803,10 +834,13 @@
       <h1 id="hdr-title-text"></h1>
       <p id="hdr-subtitle" hidden></p>
     </div>
-    <button type="button" class="btn-text practice-name only-pc" id="hdr-name" aria-haspopup="dialog">Nuova pratica</button>
+    <button type="button" class="btn-text practice-name only-pc" id="hdr-name" aria-haspopup="dialog">Nuovo progetto</button>
     <div class="spacer"></div>
-    <button type="button" class="btn-icon" id="hdr-menu" aria-label="Menu" aria-haspopup="dialog">
-      <svg class="icon" aria-hidden="true"><use href="#i-menu"/></svg>
+    <button type="button" class="btn-icon hdr-act" id="hdr-menu" aria-label="Impostazioni" aria-haspopup="dialog">
+      <svg class="icon" aria-hidden="true"><use href="#i-impostazioni"/></svg><span class="only-pc">Impostazioni</span>
+    </button>
+    <button type="button" class="btn-icon hdr-act" id="hdr-info" aria-label="Informazioni" aria-haspopup="dialog">
+      <svg class="icon" aria-hidden="true"><use href="#i-info"/></svg><span class="only-pc">Informazioni</span>
     </button>
     <button type="button" class="btn btn-secondary only-pc" id="hdr-print">
       <svg class="icon" aria-hidden="true"><use href="#i-stampa"/></svg><span id="hdr-print-label">Stampa</span>
@@ -836,7 +870,7 @@
     </section>
 
     <!-- Pratica: sul telefono una schermata, sul PC la colonna sinistra -->
-    <section class="screen" id="scr-pratica" aria-label="Pratica">
+    <section class="screen" id="scr-pratica" aria-label="Progetto">
       <div class="screen-body">
         <h2 class="t-section section-title">Documenti</h2>
         <div class="doc-list" id="doc-list"></div>
@@ -925,12 +959,13 @@
       </div>
 
       <div class="tools" id="tools">
-        <div class="only-pc">
-          <div class="tools-label">Tipo</div>
-          <div class="tools-type">
+        <div>
+          <div class="tools-label only-pc">Tipo</div>
+          <button type="button" class="btn btn-secondary tools-type" id="tools-type" aria-haspopup="dialog">
             <svg class="icon" aria-hidden="true" id="tools-type-icon"><use href="#i-documento-generico"/></svg>
             <span id="tools-type-label"></span>
-          </div>
+            <svg class="icon is-vertical" aria-hidden="true"><use href="#i-avanti"/></svg>
+          </button>
         </div>
         <div>
           <div class="tools-label only-pc">Modalità</div>
@@ -940,7 +975,7 @@
             <button type="button" data-mode="bn">B/N</button>
             <button type="button" data-mode="originale">Originale</button>
           </div>
-          <p class="t-caption" id="modes-note" hidden>La modalità si sceglie per documento: crea un documento con questa foto.</p>
+          <p class="t-caption" id="modes-note" hidden>Vale per tutte le foto da assegnare.</p>
         </div>
         <div class="tool-row only-phone">
           <button type="button" class="btn-text tool-btn" id="tool-ruota" aria-keyshortcuts="R">
@@ -1029,8 +1064,13 @@
             <div class="exp-warn-body">
               <p id="exp-warn-un" hidden></p>
               <p id="exp-warn-check" hidden></p>
-              <button type="button" class="btn-text" id="exp-warn-back">Torna alla pratica</button>
+              <button type="button" class="btn-text" id="exp-warn-back">Torna al progetto</button>
             </div>
+          </div>
+          <div class="field">
+            <label for="exp-progetto">Progetto <span aria-hidden="true">*</span></label>
+            <input type="text" id="exp-progetto" data-campo="title" autocomplete="off" maxlength="80" aria-required="true" aria-describedby="exp-progetto-hint">
+            <p class="field-hint" id="exp-progetto-hint">Obbligatorio: se lo lasci vuoto si usa il nome proposto.</p>
           </div>
           <div class="field-row">
             <div class="field">
@@ -1069,7 +1109,7 @@
       </div>
       <div class="bottom-bar">
         <p class="t-caption num exp-progress" id="exp-progress" aria-live="polite"></p>
-        <button type="button" class="btn btn-secondary" id="exp-new">Nuova pratica</button>
+        <button type="button" class="btn btn-secondary" id="exp-new">Nuovo progetto</button>
         <button type="button" class="btn btn-primary" id="exp-save">
           <svg class="icon" aria-hidden="true" id="exp-save-icon"><use href="#i-condividi"/></svg><span id="exp-save-label">Salva o condividi</span>
         </button>
@@ -1095,29 +1135,127 @@
       <svg class="icon" aria-hidden="true"><use href="#i-chiudi"/></svg>
     </button>
   </div>
-  <div class="overlay-body">
-    <button type="button" class="btn btn-secondary" id="pref-apri">Apri progetto</button>
-    <div>
-      <div class="tools-label" id="tema-label">Tema</div>
+  <div class="overlay-body pref-body">
+    <section class="pref-section" aria-labelledby="pref-progetto-title">
+      <h3 class="t-section" id="pref-progetto-title">Progetto</h3>
+      <div class="pref-actions">
+        <button type="button" class="btn btn-secondary" id="pref-apri">Apri progetto</button>
+        <button type="button" class="btn btn-secondary" id="pref-salva">Salva progetto</button>
+      </div>
+    </section>
+
+    <section class="pref-section" aria-labelledby="pref-nomi-title">
+      <div class="pref-head">
+        <h3 class="t-section" id="pref-nomi-title">Nomi dei file</h3>
+        <button type="button" class="btn btn-text" id="pref-schema-reset" aria-label="Ripristina gli schemi dei nomi">Ripristina</button>
+      </div>
+      <p class="t-caption" id="pref-schema-hint">Segnaposto: {Progetto} {Cognome} {Nome} {Tipo} {Data} {N}</p>
+      <div class="field">
+        <label for="pref-schema-unico">PDF unico</label>
+        <input type="text" id="pref-schema-unico" data-schema="schemaUnico" autocomplete="off" spellcheck="false" maxlength="200" aria-describedby="pref-schema-hint pref-prev-unico">
+        <p class="field-hint pref-preview num" id="pref-prev-unico"></p>
+      </div>
+      <div class="field">
+        <label for="pref-schema-separati">Uno per documento</label>
+        <input type="text" id="pref-schema-separati" data-schema="schemaSeparati" autocomplete="off" spellcheck="false" maxlength="200" aria-describedby="pref-schema-hint pref-prev-separati">
+        <p class="field-hint pref-preview num" id="pref-prev-separati"></p>
+      </div>
+    </section>
+
+    <section class="pref-section" aria-labelledby="pref-tipi-title">
+      <h3 class="t-section" id="pref-tipi-title">Tipi e sigle</h3>
+      <p class="t-caption" id="pref-tipi-hint">La sigla è il {Tipo} nei nomi dei file.</p>
+      <div class="pref-types" id="pref-types" role="list" aria-labelledby="pref-tipi-title"></div>
+      <p class="field-hint pref-error" id="pref-types-error" aria-live="polite"></p>
+      <div class="pref-new" role="group" aria-labelledby="pref-new-title">
+        <h4 class="t-label" id="pref-new-title">Aggiungi un tipo</h4>
+        <div class="field-row">
+          <div class="field">
+            <label for="pref-new-label">Nome</label>
+            <input type="text" id="pref-new-label" autocomplete="off" maxlength="40">
+          </div>
+          <div class="field">
+            <label for="pref-new-sigla">Sigla</label>
+            <input type="text" id="pref-new-sigla" autocomplete="off" spellcheck="false" maxlength="20">
+          </div>
+        </div>
+        <div class="segmented" role="group" aria-label="Famiglia del tipo" id="pref-new-family">
+          <button type="button" data-family="tessera" aria-pressed="false">Tessera</button>
+          <button type="button" data-family="foglio" aria-pressed="true">Foglio</button>
+        </div>
+        <p class="field-hint pref-error" id="pref-new-error" aria-live="polite"></p>
+        <button type="button" class="btn btn-secondary" id="pref-new-add">
+          <svg class="icon" aria-hidden="true"><use href="#i-aggiungi"/></svg>Aggiungi tipo
+        </button>
+      </div>
+    </section>
+
+    <section class="pref-section" aria-labelledby="tema-label">
+      <h3 class="t-section" id="tema-label">Tema</h3>
       <div class="segmented" role="group" aria-labelledby="tema-label" id="pref-theme">
         <button type="button" data-theme-choice="system">Sistema</button>
         <button type="button" data-theme-choice="light">Chiaro</button>
         <button type="button" data-theme-choice="dark">Scuro</button>
       </div>
-    </div>
-    <p class="t-caption" id="app-version"></p>
+    </section>
+
+    <section class="pref-section" aria-labelledby="pref-pdf-title">
+      <h3 class="t-section" id="pref-pdf-title">PDF</h3>
+      <div class="switch-row">
+        <div class="switch-text">
+          <span class="t-label" id="pref-editable-label">PDF modificabile in ScanForge</span>
+          <p class="t-caption" id="pref-editable-hint">Valore iniziale in Esporta.</p>
+        </div>
+        <button type="button" class="switch" role="switch" id="pref-editable" aria-checked="false" aria-labelledby="pref-editable-label" aria-describedby="pref-editable-hint"></button>
+      </div>
+    </section>
   </div>
 </section>
 
-<!-- Nome della pratica (PC): Cognome e Nome -->
+<!-- Informazioni sull'app -->
+<section class="overlay" id="ov-informazioni" role="dialog" aria-modal="true" aria-labelledby="ov-informazioni-title">
+  <div class="overlay-head">
+    <h2 class="sheet-title" id="ov-informazioni-title">Informazioni</h2>
+    <button type="button" class="btn-icon" data-close aria-label="Chiudi">
+      <svg class="icon" aria-hidden="true"><use href="#i-chiudi"/></svg>
+    </button>
+  </div>
+  <div class="overlay-body pref-body">
+    <section class="pref-section">
+      <p class="t-section num" id="app-version"></p>
+      <p class="t-caption">Dalla foto al PDF pulito, pronto da stampare. Senza account e senza inviare nulla.</p>
+    </section>
+    <section class="pref-section" aria-label="Collegamenti">
+      <p class="t-label">Sito web</p>
+      <p><a class="info-link" id="info-sito" target="_blank" rel="noopener noreferrer"></a></p>
+      <p class="t-label">Pagina del progetto</p>
+      <p><a class="info-link" id="info-github" target="_blank" rel="noopener noreferrer"></a></p>
+    </section>
+    <section class="pref-section" aria-label="Licenza e API">
+      <p class="t-caption">Licenza AGPL-3.0</p>
+      <p class="t-caption num" id="info-api"></p>
+      <p class="t-caption">Tutto resta su questo dispositivo: le foto non vengono inviate a nessun server.</p>
+    </section>
+    <div class="pref-actions">
+      <button type="button" class="btn btn-secondary" data-close>Chiudi</button>
+    </div>
+  </div>
+</section>
+
+<!-- Nome del progetto, Cognome e Nome (PC) -->
 <section class="overlay overlay-dialog-name" id="ov-nome" role="dialog" aria-modal="true" aria-labelledby="ov-nome-title">
   <div class="overlay-head">
-    <h2 class="sheet-title" id="ov-nome-title">Pratica</h2>
+    <h2 class="sheet-title" id="ov-nome-title">Progetto</h2>
     <button type="button" class="btn-icon" data-close aria-label="Chiudi">
       <svg class="icon" aria-hidden="true"><use href="#i-chiudi"/></svg>
     </button>
   </div>
   <div class="overlay-body">
+    <div class="field">
+      <label for="nm-progetto">Progetto <span aria-hidden="true">*</span></label>
+      <input type="text" id="nm-progetto" data-campo="title" autocomplete="off" maxlength="80" aria-required="true" aria-describedby="nm-progetto-hint">
+      <p class="field-hint" id="nm-progetto-hint">Obbligatorio: se lo lasci vuoto si usa il nome proposto.</p>
+    </div>
     <div class="field">
       <label for="nm-cognome">Cognome</label>
       <input type="text" id="nm-cognome" data-campo="cognome" autocomplete="off" maxlength="80">
@@ -1627,7 +1765,22 @@
   Object.keys(presets).forEach(k => Object.freeze(presets[k]));
   Object.freeze(presets);
 
-  // Pipeline fissa: warp -> keystone -> rotazione -> ombre -> enhance.
+  // Specchia in orizzontale (h) e/o in verticale (v): copia nuova, l'input non si tocca. Ultimo
+  // passo di ogni pipeline, così lo specchio è esattamente quello del risultato senza.
+  function flip(img, h, v) {
+    const W = img.width, H = img.height, s = img.data;
+    const d = new s.constructor(s.length);
+    for (let y = 0; y < H; y++) {
+      const sy = v ? H - 1 - y : y;
+      for (let x = 0; x < W; x++) {
+        const si = (sy * W + (h ? W - 1 - x : x)) * 4, di = (y * W + x) * 4;
+        d[di] = s[si]; d[di + 1] = s[si + 1]; d[di + 2] = s[si + 2]; d[di + 3] = s[si + 3];
+      }
+    }
+    return { data: d, width: W, height: H };
+  }
+
+  // Pipeline fissa: warp -> keystone -> rotazione -> ombre -> enhance -> specchio.
   // onStage è solo diagnostico: non influisce sui calcoli.
   function process(img, opts, ops) {
     const settings = opts.settings, corners = opts.corners, onStage = opts.onStage;
@@ -1668,18 +1821,24 @@
     const t0 = clock.now();
     enhance(result, settings);
     stage('enhance', t0);
+
+    if (settings.flipH || settings.flipV) {
+      const t1 = clock.now();
+      result = flip(result, !!settings.flipH, !!settings.flipV);
+      stage('flip', t1);
+    }
     return result;
   }
 
   const api = {
-    version: '0.3.0',
+    version: '0.3.1',
     apiVersion: 1,
     detectDocument,
     process,
     defaultSettings,
     presets,
     core: { normalizeAlpha, solveLinearSystem, computeHomography, applyH, bilinearSample,
-            warp, outputSize, keystone, sharpen, enhance, removeShadows, detectDocument,
+            warp, outputSize, keystone, sharpen, enhance, removeShadows, detectDocument, flip,
             process, defaultCorners }
   };
 
@@ -1749,7 +1908,14 @@
     return { img: result, warped };
   }
 
+  // flipH e flipV (specchio) valgono per tutte le modalità e sono l'ultimo passo.
   function process(img, opts, ops) {
+    const out = processMode(img, opts, ops);
+    const s = opts.settings;
+    return s.flipH || s.flipV ? core.flip(out, !!s.flipH, !!s.flipV) : out;
+  }
+
+  function processMode(img, opts, ops) {
     const settings = opts.settings;
     if (MODES.indexOf(settings.mode) < 0) throw new TypeError('mode non valida: ' + String(settings.mode));
     if (settings.mode === 'originale') {
@@ -2919,7 +3085,7 @@
     const st = straighten(src, opts, ops), out = st.img;
 
     let t0 = sw.now();
-    if (settings.mode !== 'grigi') whiteBalance(out);
+    if (settings.mode !== 'grigi' && settings.bilanciaBianco !== false) whiteBalance(out);
     const illum = estimateIllumination(out, 'card'), target = cardTarget(out, illum);
     if (target > 0) applyGain(out, illum, { target, maxGain: CARD_MAX_GAIN });
     sw.stage('illumination', t0);
@@ -3465,6 +3631,7 @@
 
   function copia(pr) {
     return {
+      title: pr.title || '',
       cognome: pr.cognome, nome: pr.nome,
       documents: pr.documents.map((d) => ({ id: d.id, typeId: d.typeId, mode: d.mode, pageIds: d.pageIds.slice() })),
       unassigned: pr.unassigned.slice()
@@ -3482,7 +3649,19 @@
   }
 
   function newPractice() {
-    return { cognome: '', nome: '', documents: [], unassigned: [] };
+    return { title: '', cognome: '', nome: '', documents: [], unassigned: [] };
+  }
+
+  // Nome del progetto: quello scritto dall'utente (title) oppure, finché è vuoto, l'etichetta del
+  // tipo del primo documento ("Progetto" se non ce ne sono).
+  function proposedTitle(pr, types) {
+    const doc = pr.documents && pr.documents[0];
+    const t = doc ? (types || TYPES).find((x) => x.id === doc.typeId) : null;
+    return t ? t.label : 'Progetto';
+  }
+
+  function projectTitle(pr, types) {
+    return String(pr.title || '').trim() || proposedTitle(pr, types);
   }
 
   function addPages(pr, pageIds) {
@@ -3617,7 +3796,7 @@
   const SEP_AGLI_ESTREMI = /^(?: - |_|-| )+|(?: - |_|-| )+$/g;
 
   // Toglie un segnaposto dallo schema insieme a un solo separatore: quello che lo precede,
-  // oppure quello che lo segue se il segnaposto e' all'inizio del nome.
+  // oppure quello che lo segue se il segnaposto è all'inizio del nome.
   function togliSegnaposto(schema, token) {
     let s = schema;
     for (let i = s.indexOf(token); i >= 0; i = s.indexOf(token)) {
@@ -3648,8 +3827,8 @@
     return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate());
   }
 
-  // Nomi dei file (senza estensione) dai gruppi di exportPlan. {Tipo} e' la sigla del tipo del
-  // primo documento del gruppo; un gruppo senza documenti e' un generico.
+  // Nomi dei file (senza estensione) dai gruppi di exportPlan. {Tipo} è la sigla del tipo del
+  // primo documento del gruppo; un gruppo senza documenti è un generico.
   function fileNames(groups, opts) {
     const o = opts || {};
     const tipi = o.types || TYPES;
@@ -3657,7 +3836,9 @@
     const data = dataLocale(o.date || new Date());
     const cognome = String(o.cognome || '').trim();
     const nome = String(o.nome || '').trim();
+    const progetto = String(o.progetto || '').trim();
     let schema = o.schema == null ? SCHEMAS.unico : String(o.schema);
+    if (!progetto) schema = togliSegnaposto(schema, '{Progetto}');
     if (!cognome) schema = togliSegnaposto(schema, '{Cognome}');
     if (!nome) schema = togliSegnaposto(schema, '{Nome}');
     const conN = schema.indexOf('{N}') >= 0;
@@ -3668,10 +3849,11 @@
       const t = tipi.find((x) => x.id === (doc ? doc.typeId : 'generico'));
       return t ? t.sigla : '';
     };
-    const costruisci = (sch, g, n) => pulisciNome(sch.replace(/\{(Cognome|Nome|Tipo|Data|N)\}/g, (_, k) => (
-      k === 'Cognome' ? cognome : k === 'Nome' ? nome : k === 'Tipo' ? sigla(g) : k === 'Data' ? data : String(n)
+    const costruisci = (sch, g, n) => pulisciNome(sch.replace(/\{(Progetto|Cognome|Nome|Tipo|Data|N)\}/g, (_, k) => (
+      k === 'Progetto' ? progetto : k === 'Cognome' ? cognome : k === 'Nome' ? nome : k === 'Tipo' ? sigla(g) : k === 'Data' ? data : String(n)
     )));
-    const vuoto = () => pulisciNome('ScanForge_' + data);
+    // Senza nulla di scritto nel nome: il nome del progetto, poi ScanForge_{Data}
+    const vuoto = () => pulisciNome(progetto) || pulisciNome('ScanForge_' + data);
 
     // Il numero {N} non deve mai finire tra i caratteri tagliati: si accorcia il resto.
     const conNumero = (g, n) => {
@@ -3692,11 +3874,11 @@
       }
       return pulisciNome(prima + num + dopo);
     };
-    const sch2 = (g) => pulisciNome0(schema.replace(/\{(Cognome|Nome|Tipo|Data|N)\}/g, (_, k) => (
-      k === 'N' ? MARCA : (k === 'Cognome' ? cognome : k === 'Nome' ? nome : k === 'Tipo' ? sigla(g) : data).replace(MARCA, '')
+    const sch2 = (g) => pulisciNome0(schema.replace(/\{(Progetto|Cognome|Nome|Tipo|Data|N)\}/g, (_, k) => (
+      k === 'N' ? MARCA : (k === 'Progetto' ? progetto : k === 'Cognome' ? cognome : k === 'Nome' ? nome : k === 'Tipo' ? sigla(g) : data).replace(MARCA, '')
     )));
 
-    // Ogni nome e' controllato dopo pulizia e taglio: un doppione prende il primo numero libero.
+    // Ogni nome è controllato dopo pulizia e taglio: un doppione prende il primo numero libero.
     const usati = new Set();
     return groups.map((g) => {
       const base = costruisci(senzaN, g, 1) || vuoto();
@@ -3826,14 +4008,88 @@
     return out;
   }
 
+  // Dal dizionario dell'oggetto allegato (s, con `inizio` subito dopo "N 0 obj") ai byte dello stream.
+  // Il dizionario deve chiudersi con >> e lo stream stare prima di endobj; niente filtri, /Length diretto.
+  function estraiStream(bytes, s, inizio, base) {
+    const fineObj = s.indexOf('endobj', inizio);
+    const sIdx = s.indexOf('stream', inizio);
+    if (sIdx < 0 || (fineObj >= 0 && sIdx > fineObj)) return null;
+    const dict = s.slice(inizio, sIdx);
+    if (!/>>\s*$/.test(dict)) return null;
+    let ini2 = sIdx + 6;
+    if (s.charCodeAt(ini2) === 13 && s.charCodeAt(ini2 + 1) === 10) ini2 += 2;
+    else if (s.charCodeAt(ini2) === 10) ini2 += 1;
+    else return null;
+    if (/\/Filter\b/.test(dict)) return null;
+    const lm = /\/Length\s+(\d+)(?!\s+\d+\s+R)(?![\d.])/.exec(dict);
+    if (!lm) return null;
+    const len = Number(lm[1]);
+    if (!Number.isSafeInteger(len) || len > MAX_ATTACHMENT) return null;
+    const da = base + ini2;
+    if (da + len > bytes.length) return null;
+    return bytes.slice(da, da + len);
+  }
+
+  // Percorso veloce per i PDF scritti da buildPdf: dalla coda si legge startxref e la tabella xref
+  // classica, poi catalogo, specifica del file e oggetto allegato per offset esatto, decodificando
+  // solo poche centinaia di byte. Qualsiasi dubbio (aggiornamenti incrementali, xref compressa,
+  // offset che non tornano) dà undefined e si ricade sulla scansione del testo.
+  function readAttachmentViaXref(bytes) {
+    const lat1 = new TextDecoder('latin1');
+    const pezzo = (a, b) => lat1.decode(bytes.subarray(Math.max(0, a), Math.min(bytes.length, b)));
+    const sx = /startxref\s+(\d+)\s*%%EOF\s*$/.exec(pezzo(bytes.length - 1024, bytes.length));
+    if (!sx) return undefined;
+    const xpos = Number(sx[1]);
+    if (!(xpos > 0 && xpos < bytes.length)) return undefined;
+    const hm = /^xref\s+0\s+(\d+)\s+/.exec(pezzo(xpos, xpos + 64));
+    if (!hm) return undefined;
+    const totale = Number(hm[1]);
+    if (!(totale > 0 && totale <= 100000)) return undefined;
+    const tab0 = xpos + hm[0].length;
+    const tab = pezzo(tab0, tab0 + totale * 20 + 256);
+    const offs = [];
+    for (let i = 0; i < totale; i++) {
+      const e = /^(\d{10}) (\d{5}) ([nf])/.exec(tab.slice(i * 20, i * 20 + 20));
+      if (!e) return undefined;
+      offs.push(e[3] === 'n' ? Number(e[1]) : -1);
+    }
+    const root = /^trailer\s*<<[^]*?\/Root\s+(\d+)\s+0\s+R/.exec(tab.slice(totale * 20));
+    if (!root) return undefined;
+    // Testo dell'oggetto n (fino al suo endobj, al massimo 2 KB) e posizione dopo "n 0 obj"
+    const oggetto = (n) => {
+      const o = offs[n];
+      if (!(o >= 0 && o < bytes.length)) return null;
+      const w = pezzo(o, o + 2048);
+      const h = new RegExp('^' + n + '\\s+0\\s+obj\\b').exec(w);
+      return h ? { w, dopo: h[0].length, base: o } : null;
+    };
+    const cat = oggetto(Number(root[1]));
+    if (!cat) return undefined;
+    const nome = ATTACHMENT_NAME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const fm = new RegExp('/EmbeddedFiles\\s*<<\\s*/Names\\s*\\[\\s*\\(' + nome + '\\)\\s*(\\d+)\\s+0\\s+R').exec(cat.w.slice(0, cat.w.indexOf('endobj') < 0 ? undefined : cat.w.indexOf('endobj')));
+    if (!fm) return undefined;
+    const spec = oggetto(Number(fm[1]));
+    if (!spec) return undefined;
+    const sw = spec.w.slice(0, spec.w.indexOf('endobj') < 0 ? undefined : spec.w.indexOf('endobj'));
+    const em = /\/EF\s*<<\s*\/F\s+(\d+)\s+0\s+R/.exec(sw);
+    if (!em || sw.indexOf('(' + ATTACHMENT_NAME + ')') < 0) return undefined;
+    const emb = oggetto(Number(em[1]));
+    if (!emb) return undefined;
+    const r = estraiStream(bytes, emb.w, emb.dopo, emb.base);
+    return r === null ? undefined : r;
+  }
+
   // Ricerca sul PDF letto come latin1 (un carattere per byte, quindi gli indici coincidono con
-  // i byte). Ogni ricerca e lineare: si lavora per segmenti delimitati da endobj, senza span
-  // lazy illimitati, cosi un file ostile non puo rallentare la lettura. La specifica del file
+  // i byte). Ogni ricerca è lineare: si lavora per segmenti delimitati da endobj, senza span
+  // lazy illimitati, così un file ostile non può rallentare la lettura. La specifica del file
   // e il suo /EF devono stare nello stesso oggetto. Si prende l'ultima occorrenza: gli
-  // aggiornamenti incrementali accodano le versioni nuove.
+  // aggiornamenti incrementali accodano le versioni nuove. Il numero d'oggetto conta solo a inizio
+  // riga (o dopo un endobj): un testo dell'allegato come "5 0 obj" non può coprire l'oggetto vero.
   function readPdfAttachment(bytes) {
     try {
       if (!(bytes instanceof Uint8Array) || bytes.length === 0) return null;
+      const veloce = readAttachmentViaXref(bytes);
+      if (veloce) return veloce;
       const s = new TextDecoder('latin1').decode(bytes);
       const nome = '(' + ATTACHMENT_NAME + ')';
       const reEf = /\/EF\s*<<\s*\/F\s+(\d+)\s+0\s+R/;
@@ -3851,35 +4107,19 @@
         ini = e + 6;
       }
       if (n === null) return null;
-      const re = new RegExp('(^|[^0-9])' + n + '\\s+0\\s+obj\\b', 'g');
+      const re = new RegExp('(^|[\\r\\n]|endobj)\\s*' + n + '\\s+0\\s+obj\\b', 'g');
       let inizio = -1;
       let mm;
       while ((mm = re.exec(s))) inizio = mm.index + mm[0].length;
       if (inizio < 0) return null;
-      // Il dizionario dell'oggetto deve chiudersi con >> e stream prima del suo endobj.
-      const fineObj = s.indexOf('endobj', inizio);
-      const sIdx = s.indexOf('stream', inizio);
-      if (sIdx < 0 || (fineObj >= 0 && sIdx > fineObj)) return null;
-      const dict = s.slice(inizio, sIdx);
-      if (!/>>\s*$/.test(dict)) return null;
-      let ini2 = sIdx + 6;
-      if (s.charCodeAt(ini2) === 13 && s.charCodeAt(ini2 + 1) === 10) ini2 += 2;
-      else if (s.charCodeAt(ini2) === 10) ini2 += 1;
-      else return null;
-      if (/\/Filter\b/.test(dict)) return null;
-      const lm = /\/Length\s+(\d+)(?!\s+\d+\s+R)(?![\d.])/.exec(dict);
-      if (!lm) return null;
-      const len = Number(lm[1]);
-      if (!Number.isSafeInteger(len) || len > MAX_ATTACHMENT) return null;
-      if (ini2 + len > bytes.length) return null;
-      return bytes.slice(ini2, ini2 + len);
+      return estraiStream(bytes, s, inizio, 0);
     } catch (e) {
       return null;
     }
   }
 
   const api = {
-    TYPES, familyOf, newPractice, addPages, createDocument, removeDocument, movePage,
+    TYPES, familyOf, newPractice, proposedTitle, projectTitle, addPages, createDocument, removeDocument, movePage,
     setType, setMode, swapFrontBack, removePage, fromLegacy, exportPlan, legacyFields,
     SCHEMAS, fileNames, crc32, makeZip, ATTACHMENT_NAME, readPdfAttachment,
     cleanFileName: pulisciNome
@@ -4118,11 +4358,11 @@
       const mdl = globalThis.ScanForge.model;
       const mappa = new Map();
       st.pages.forEach((p, i) => {
-        if (mappa.has(p.id)) throw badInput('Pratica non valida');
+        if (mappa.has(p.id)) throw badInput('Progetto non valido');
         mappa.set(p.id, 'p' + i);
       });
       const ricava = id => {
-        if (!mappa.has(id)) throw badInput('Pratica non valida');
+        if (!mappa.has(id)) throw badInput('Progetto non valido');
         return mappa.get(id);
       };
       const documents = (pr.documents || []).map(d => Object.assign({}, d, { pageIds: (d.pageIds || []).map(ricava) }));
@@ -4131,16 +4371,29 @@
       const unassigned = (pr.unassigned || []).map(ricava);
       unassigned.forEach(id => usati.add(id));
       st.pages.forEach((_, i) => { if (!usati.has('p' + i)) unassigned.push('p' + i); });
+      // Tipi propri usati dai documenti: la definizione viaggia col file, così un altro
+      // dispositivo riapre la stessa famiglia e la stessa sigla. I predefiniti non si scrivono.
+      const predefiniti = new Set(mdl.TYPES.map(t => t.id));
+      const usatiTipi = new Set(documents.map(d => d.typeId));
+      const tipi = (Array.isArray(st.types) ? st.types : [])
+        .filter(t => t && !predefiniti.has(t.id) && usatiTipi.has(t.id))
+        .map(t => ({ id: t.id, label: t.label, sigla: t.sigla, family: t.family }));
+      const bozza = { title: typeof pr.title === 'string' ? pr.title : '', cognome: pr.cognome || '', nome: pr.nome || '', documents: documents, unassigned: unassigned };
+      if (tipi.length) bozza.types = tipi;
       // Stesse regole dell'apertura: un progetto salvato deve potersi riaprire.
-      practice = validatePractice({ cognome: pr.cognome || '', nome: pr.nome || '', documents: documents, unassigned: unassigned }, st.pages.length);
-      campi = mdl.legacyFields(practice);
+      practice = validatePractice(bozza, st.pages.length);
+      campi = mdl.legacyFields(practice, mdl.TYPES.concat(practice.types || []));
     }
     const out = {
       scanforgeProject: 1, // versione del formato, per compatibilita futura
       projectName: st.projectName || '',
       a4Compose: !!st.a4Compose
     };
-    if (practice) out.practice = practice;
+    if (practice) {
+      // Il nome automatico (vuoto) non si scrive
+      out.practice = Object.assign({}, practice);
+      if (!out.practice.title) delete out.practice.title;
+    }
     out.pages = st.pages.map((p, i) => {
       const f = campi && campi.get('p' + i);
       return {
@@ -4159,6 +4412,7 @@
   function badInput(message) { return { code: 'bad-input', message: message }; }
 
   const MODI_DOC = ['colori', 'grigi', 'bn', 'originale'];
+  const TITLE_MAX = 80;
 
   // Pratica letta dal file: forma, id delle pagine esistenti e senza doppioni, tessere al più
   // di due pagine. Le pagine non citate vanno in unassigned.
@@ -4167,7 +4421,8 @@
     if (!pr || typeof pr !== 'object' || Array.isArray(pr)) throw ko();
     const cognome = pr.cognome === undefined ? '' : pr.cognome;
     const nome = pr.nome === undefined ? '' : pr.nome;
-    if (typeof cognome !== 'string' || typeof nome !== 'string') throw ko();
+    const title = pr.title === undefined ? '' : pr.title;
+    if (typeof cognome !== 'string' || typeof nome !== 'string' || typeof title !== 'string') throw ko();
     if (!Array.isArray(pr.documents) || !Array.isArray(pr.unassigned)) throw ko();
     const mdl = globalThis.ScanForge.model;
     const validi = new Set();
@@ -4189,12 +4444,40 @@
       const mode = d.mode === undefined ? null : d.mode;
       if (mode !== null && MODI_DOC.indexOf(mode) < 0) throw ko();
       const pageIds = prendi(d.pageIds);
-      if (mdl.familyOf(d.typeId) === 'tessera' && pageIds.length > 2) throw ko();
       return { id: d.id, typeId: d.typeId, mode: mode, pageIds: pageIds };
     });
+    // I tipi del file si leggono dopo i documenti: ognuno deve servire a un documento
+    const types = validateTypes(pr.types, new Set(documents.map(d => d.typeId)));
+    const tutti = mdl.TYPES.concat(types || []);
+    documents.forEach(d => { if (mdl.familyOf(d.typeId, tutti) === 'tessera' && d.pageIds.length > 2) throw ko(); });
     const unassigned = prendi(pr.unassigned);
     for (let i = 0; i < nPagine; i++) if (!visti.has('p' + i)) unassigned.push('p' + i);
-    return { cognome: cognome, nome: nome, documents: documents, unassigned: unassigned };
+    const out = { title: title.trim().slice(0, TITLE_MAX), cognome: cognome, nome: nome, documents: documents, unassigned: unassigned };
+    if (types) out.types = types;
+    return out;
+  }
+
+  // Tipi propri scritti nella pratica: { id, label (1-60), sigla (1-20, pulita come un nome di
+  // file), family }, id unici e diversi dai predefiniti, ognuno usato da almeno un documento
+  // (referenced): così la lista non supera il numero dei documenti. undefined = nessun tipo proprio.
+  function validateTypes(list, referenced) {
+    if (list === undefined || list === null) return undefined;
+    const ko = () => badInput('File progetto non valido');
+    if (!Array.isArray(list) || list.length > referenced.size) throw ko();
+    const mdl = globalThis.ScanForge.model;
+    const ids = new Set(mdl.TYPES.map(t => t.id));
+    return list.map(t => {
+      if (!t || typeof t !== 'object' || typeof t.id !== 'string' || !t.id || t.id.length > 60 || ids.has(t.id) || !referenced.has(t.id)) throw ko();
+      ids.add(t.id);
+      if (typeof t.label !== 'string' || typeof t.sigla !== 'string') throw ko();
+      const label = t.label.trim();
+      // Stessa pulizia della sigla nelle Impostazioni, così due tipi uguali si riconoscono
+      const pulita = mdl.cleanFileName(t.sigla.trim());
+      const sigla = pulita.slice(0, 20).replace(/[ .]+$/, '');
+      if (!label || label.length > 60 || !sigla || pulita.length > 20) throw ko();
+      if (t.family !== 'tessera' && t.family !== 'foglio') throw ko();
+      return { id: t.id, label: label, sigla: sigla, family: t.family };
+    });
   }
 
   // Un progetto 0.2 non ha i campi introdotti dopo (keystone, rotFine): le impostazioni
@@ -4218,8 +4501,11 @@
           docSide: p.docSide || 'fronte'
         };
     });
+    // Nella 0.2 docGroup conta solo con A4 attivo: con A4 spento le pagine erano fogli singoli
+    // e non devono diventare tessere
+    const legacy = data.a4Compose ? pages : pages.map(p => Object.assign({}, p, { docGroup: null }));
     const practice = data.practice === undefined || data.practice === null
-      ? sf.model.fromLegacy(pages)
+      ? sf.model.fromLegacy(legacy)
       : validatePractice(data.practice, pages.length);
     return {
       projectName: data.projectName || '',
@@ -4403,7 +4689,7 @@
     contrast: [-100, 100], brightness: [-100, 100], sharpen: [0, 100],
     rotFine: [-45, 45], keystoneV: [-100, 100], keystoneH: [-100, 100]
   };
-  const SETTING_FLAGS = ['bw', 'autoEnhance', 'shadows', 'perspective', 'angoliArrotondati'];
+  const SETTING_FLAGS = ['bw', 'autoEnhance', 'shadows', 'perspective', 'angoliArrotondati', 'flipH', 'flipV', 'bilanciaBianco'];
   const MODES = ['colori', 'grigi', 'bn', 'originale'];
   const DOC_TYPES = ['identita', 'foglio'];
   const INK_RANGE = [0.1, 0.5];
@@ -4774,7 +5060,7 @@
 // cambia solo con commit(). view e selezione (docId, pageId) valgono per telefono e PC, così
 // attraversare i 1024 px non le perde.
 const VIEWS = ['acquisisci', 'pratica', 'correggi', 'esporta'];
-const OVERLAYS = ['impostazioni', 'nome', 'regola', 'domanda', 'fotocamera', 'tipo', 'documento'];
+const OVERLAYS = ['impostazioni', 'informazioni', 'nome', 'regola', 'domanda', 'fotocamera', 'tipo', 'documento'];
 const mqPc = window.matchMedia('(min-width: 1024px)');
 const mqDark = window.matchMedia('(prefers-color-scheme: dark)');
 
@@ -4813,7 +5099,8 @@ var prefs = (function () {
     schemaUnico: SCHEMAS.unico,
     schemaSeparati: SCHEMAS.separati,
     editablePdf: false,
-    types: { sigle: {}, propri: [] } // sigle cambiate per id e tipi aggiunti dall'utente
+    // sigle cambiate per id, tipi aggiunti dall'utente e contatore degli id (mai riusati)
+    types: { sigle: {}, propri: [], next: 1 }
   };
   const isStr = v => typeof v === 'string';
   const isTipo = t => t && isStr(t.id) && t.id && isStr(t.label) && isStr(t.sigla) &&
@@ -4827,7 +5114,8 @@ var prefs = (function () {
     types: v => !!v && typeof v === 'object' &&
       !!v.sigle && typeof v.sigle === 'object' && !Array.isArray(v.sigle) &&
       Object.keys(v.sigle).every(k => isStr(v.sigle[k])) &&
-      Array.isArray(v.propri) && v.propri.every(isTipo)
+      Array.isArray(v.propri) && v.propri.every(isTipo) &&
+      (v.next === undefined || (Number.isInteger(v.next) && v.next >= 1))
   };
   const clone = v => (v && typeof v === 'object') ? JSON.parse(JSON.stringify(v)) : v;
   let mem = {};
@@ -4871,12 +5159,19 @@ var prefs = (function () {
   return Object.freeze({ get, set, KEY, DEFAULTS: Object.freeze(clone(DEFAULTS)) });
 })();
 
-// Tipi di documento: quelli del modello con le sigle dell'utente, più i tipi propri.
+// Tipi di documento: quelli del modello con le sigle dell'utente, più i tipi propri. Dentro un
+// render() si calcolano una volta sola (prefs rilegge e copia l'archivio a ogni get); chi chiama
+// non deve modificare l'elenco.
+let typesMemo = null;
+let rendering = false;
 function getTypes() {
+  if (typesMemo) return typesMemo;
   const t = prefs.get('types');
   const base = ScanForge.model.TYPES.map(x => t.sigle[x.id] ? Object.assign({}, x, { sigla: t.sigle[x.id] }) : x);
   const ids = new Set(base.map(x => x.id));
-  return base.concat(t.propri.filter(x => !ids.has(x.id)));
+  const r = base.concat(t.propri.filter(x => !ids.has(x.id)));
+  if (rendering) typesMemo = r;
+  return r;
 }
 
 // ============================================================
@@ -4895,10 +5190,6 @@ function applyTheme() {
     const own = /dark/.test(media) ? 'dark' : 'light';
     m.setAttribute('content', THEME_COLOR[t === 'system' ? own : t]);
   });
-}
-function effectiveTheme() {
-  const t = prefs.get('theme');
-  return t === 'system' ? (mqDark.matches ? 'dark' : 'light') : t;
 }
 
 // ============================================================
@@ -4949,9 +5240,12 @@ function typeIcon(t) {
   if (!t) return 'documento-generico';
   return TYPE_ICON[t.id] || (t.family === 'tessera' ? 'tessera' : 'documento-generico');
 }
+// Nome del progetto in intestazione: quello scritto o proposto; "Nuovo progetto" finché non c'è
+// né un nome scritto né un documento.
 function practiceTitle() {
   const pr = state.practice;
-  return [pr.cognome, pr.nome].map(s => (s || '').trim()).filter(Boolean).join(' ') || 'Nuova pratica';
+  if (!String(pr.title || '').trim() && !pr.documents.length) return 'Nuovo progetto';
+  return ScanForge.model.projectTitle(pr, getTypes());
 }
 
 let pageSeq = 0;
@@ -4960,22 +5254,31 @@ function newPageId() { return 'pg' + (++pageSeq); }
 // Le immagini più grandi di MAX_DIM si riducono: il warp prospettico lavora in JS sui pixel.
 const MAX_DIM = 3000;
 
+// Stesso limite di convert (sf-io): oltre, la decodifica a piena risoluzione non sta in memoria
+const MAX_PIXELS = 50000000;
+
+// Riduce a MAX_DIM sul lato lungo un'immagine già caricata -> { src, w, h }. Il canvas di
+// appoggio si svuota subito: sui telefoni la sua bitmap resterebbe in memoria fino al GC.
+function reduceImage(img, src) {
+  const w = img.naturalWidth, h = img.naturalHeight;
+  if (Math.max(w, h) <= MAX_DIM) return { src, w, h };
+  const scale = MAX_DIM / Math.max(w, h);
+  const c = document.createElement('canvas');
+  c.width = Math.round(w * scale);
+  c.height = Math.round(h * scale);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+  const out = { src: c.toDataURL('image/jpeg', 0.92), w: c.width, h: c.height };
+  c.width = 0; c.height = 0;
+  return out;
+}
+
 // Pagina nuova da una sorgente immagine (data URL o URL di un blob); non tocca lo stato.
 function makePage(src, name = 'image') {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.addEventListener('load', () => {
-      let finalSrc = src;
-      let w = img.naturalWidth, h = img.naturalHeight;
-      if (Math.max(w, h) > MAX_DIM) {
-        const scale = MAX_DIM / Math.max(w, h);
-        const c = document.createElement('canvas');
-        c.width = Math.round(w * scale);
-        c.height = Math.round(h * scale);
-        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-        finalSrc = c.toDataURL('image/jpeg', 0.92);
-        w = c.width; h = c.height;
-      }
+      const r = reduceImage(img, src);
+      const finalSrc = r.src, w = r.w, h = r.h;
       // La miniatura nasce dall'immagine già decodificata: niente seconda lettura della foto
       resolve({
         id: newPageId(), originalSrc: finalSrc, name,
@@ -5053,10 +5356,15 @@ function setPracticeName(campo, value) {
 // chiude prima l'overlay e poi torna alla schermata precedente. Sotto la prima voce c'è una
 // voce di guardia: tornarci rimette in cronologia lo stato attuale e l'app resta aperta.
 const HISTORY_KEY = 'scanforge';
+// Profondità della voce aggiunta entrando in selezione sul telefono (0 = nessuna): l'indietro
+// annulla prima la selezione, come nelle app Android.
+let selDepth = 0;
 const embedded = (() => { try { return window.top !== window; } catch (e) { return true; } })();
 
 function snapshot() {
-  return { sf: HISTORY_KEY, view: state.view, docId: state.docId, pageId: state.pageId, overlay: state.overlay, depth: state.depth };
+  const s = { sf: HISTORY_KEY, view: state.view, docId: state.docId, pageId: state.pageId, overlay: state.overlay, depth: state.depth };
+  if (selDepth && state.depth === selDepth) s.sel = true;
+  return s;
 }
 function sameEntry(a, b) {
   return a.view === b.view && a.docId === b.docId && a.pageId === b.pageId && a.overlay === b.overlay;
@@ -5113,7 +5421,7 @@ function openOverlay(id) {
   }
   render();
   const el = overlayElement(id);
-  const first = el && el.querySelector('input:not(:disabled), button:not([data-close]):not(:disabled), [tabindex]');
+  const first = el && el.querySelector('input:not(:disabled), button:not([data-close]):not(:disabled), a[href], [tabindex]');
   if (first) first.focus();
 }
 
@@ -5132,6 +5440,15 @@ window.addEventListener('popstate', e => {
     showToast('Attendi la fine dell\'esportazione');
     return;
   }
+  // Indietro dalla voce della selezione (telefono): si annulla la selezione e si resta in Pratica
+  const valida = s && s.sf === HISTORY_KEY && !s.base;
+  if (selDepth && (!valida || !(s.depth >= selDepth))) {
+    selDepth = 0;
+    selection.clear();
+    selAnchor = null;
+  } else if (valida && s.sel && !selDepth) {
+    if (selection.size) selDepth = s.depth;
+  }
   const chiudeOverlay = state.overlay !== null;
   if (!s || s.sf !== HISTORY_KEY || s.base) {
     // Voce di guardia: si resta nell'app, sulla schermata sopra quella attuale se c'è.
@@ -5147,6 +5464,8 @@ window.addEventListener('popstate', e => {
     state.pageId = s.pageId != null ? s.pageId : null;
     state.overlay = OVERLAYS.includes(s.overlay) ? s.overlay : null;
     state.depth = s.depth > 0 ? s.depth : 1;
+    // Voce di una selezione già finita (ritrovata andando avanti): torna una voce normale
+    if (s.sel && !selDepth) history.replaceState(snapshot(), '');
   }
   render();
   if (chiudeOverlay && state.overlay === null && overlayOpener && document.contains(overlayOpener)) {
@@ -5275,6 +5594,8 @@ function updateThumb(b, pageId, opts) {
   b.classList.toggle('is-picked', picked);
   setAttr(b, 'aria-label', opts.label + (page.needsCheck ? ', controllare angoli' : '') + (picked ? ', selezionata' : ''));
   setAttr(b, 'aria-current', current ? 'true' : null);
+  // In selezione ogni foto da assegnare è un interruttore: premuta = selezionata
+  setAttr(b, 'aria-pressed', opts.pick && selection.size ? String(picked) : null);
   setAttr(b, 'aria-busy', busy ? 'true' : null);
   setAttr(b, 'aria-keyshortcuts', opts.keys || null);
   const ar = page.width + ' / ' + page.height;
@@ -5384,7 +5705,9 @@ function renderCorreggi() {
   $('stage-empty-actions').hidden = hasPages;
   const doc = findDoc(state.docId);
   const t = typeOf(doc);
-  $('tools-type-label').textContent = doc ? (t ? t.label : 'Documento') : 'Da assegnare';
+  const tipoEtichetta = doc ? (t ? t.label : 'Documento') : 'Da assegnare';
+  $('tools-type-label').textContent = tipoEtichetta;
+  setAttr($('tools-type'), 'aria-label', 'Tipo: ' + tipoEtichetta + (doc ? ', cambia' : ', scegli'));
   $('tools-type-icon').querySelector('use').setAttribute('href', '#i-' + (doc ? typeIcon(t) : 'documento-generico'));
   const swap = !!(t && t.family === 'tessera' && doc.pageIds.length === 2);
   setHidden($('pc-scambia'), !swap);
@@ -5395,9 +5718,8 @@ function renderCorreggi() {
   $('pc-page-num').textContent = pos;
   ['cg-prev', 'pc-prev'].forEach(id => { $(id).disabled = i <= 0; });
   ['cg-next', 'pc-next'].forEach(id => { $(id).disabled = i < 0 || i >= ids.length - 1; });
-  const mode = doc && doc.mode;
+  const mode = doc ? doc.mode : unassignedMode();
   $('modes').querySelectorAll('button').forEach(b => setAttr(b, 'aria-pressed', String(b.dataset.mode === mode)));
-  setHidden($('modes'), !doc);
   setHidden($('modes-note'), !!doc);
   $('source-img').alt = page ? 'Foto originale, pagina ' + (i + 1) : '';
   setAttr($('result-canvas'), 'aria-label', page ? 'Risultato, pagina ' + (i + 1) : null);
@@ -5437,7 +5759,7 @@ function renderHeader() {
   const pc = state.layout === 'pc';
   const v = state.view;
   const hasPages = allPageIds().length > 0;
-  const titles = { pratica: 'Pratica', esporta: 'Esporta' };
+  const titles = { pratica: 'Progetto', esporta: 'Esporta' };
   let title = titles[v] || '';
   let sub = '';
   if (v === 'correggi') {
@@ -5463,13 +5785,14 @@ function renderHeader() {
 }
 
 function overlayElement(id) {
-  return id === 'regola' ? $('regola') : $('ov-' + id);
+  if (id === 'regola') return $('regola');
+  return $('ov-' + id);
 }
 
 function renderOverlays() {
   const pc = state.layout === 'pc';
-  ['impostazioni', 'nome', 'domanda', 'fotocamera', 'tipo', 'documento'].forEach(id => {
-    const e = $('ov-' + id);
+  ['impostazioni', 'informazioni', 'nome', 'domanda', 'fotocamera', 'tipo', 'documento'].forEach(id => {
+    const e = overlayElement(id);
     e.classList.toggle('sheet', !pc);
     e.classList.toggle('dialog', pc);
     e.classList.toggle('is-open', state.overlay === id);
@@ -5507,12 +5830,27 @@ function renderOverlays() {
   $('exp-split').querySelectorAll('button').forEach(b =>
     b.setAttribute('aria-pressed', String(b.dataset.split === String(split))));
   document.querySelectorAll('input[data-campo]').forEach(inp => {
-    const v = state.practice[inp.dataset.campo] || '';
+    let v = state.practice[inp.dataset.campo] || '';
+    // Il nome del progetto vuoto mostra quello proposto, ma non mentre ci si scrive
+    if (inp.dataset.campo === 'title' && !v.trim() && document.activeElement !== inp) {
+      v = ScanForge.model.projectTitle(state.practice, getTypes());
+    }
     if (inp.value !== v) inp.value = v;
   });
 }
 
 function render() {
+  rendering = true;
+  typesMemo = null;
+  try {
+    renderTutto();
+  } finally {
+    rendering = false;
+    typesMemo = null;
+  }
+}
+
+function renderTutto() {
   const prima = snapshot();
   sanitize();
   if (!sameEntry(prima, snapshot()) && history.state && history.state.sf === HISTORY_KEY && !history.state.base) {
@@ -5533,7 +5871,11 @@ function render() {
   renderTipo();
   renderDocumento();
   renderEsporta();
+  renderImpostazioni();
   syncIngressi();
+  syncSelectionEntry();
+  syncDialogFocus();
+  placeToast();
 }
 
 // ============================================================
@@ -5541,6 +5883,7 @@ function render() {
 // ============================================================
 $('hdr-back').addEventListener('click', back);
 $('hdr-menu').addEventListener('click', () => openOverlay('impostazioni'));
+$('hdr-info').addEventListener('click', () => openOverlay('informazioni'));
 $('hdr-name').addEventListener('click', () => openOverlay('nome'));
 $('hdr-export').addEventListener('click', () => go('esporta'));
 $('pr-add').addEventListener('click', () => { addIntent = true; docTarget = null; go('acquisisci'); });
@@ -5574,6 +5917,11 @@ $('exp-split').addEventListener('click', e => {
 });
 document.querySelectorAll('input[data-campo]').forEach(inp =>
   inp.addEventListener('input', () => setPracticeName(inp.dataset.campo, inp.value)));
+document.querySelectorAll('input[data-campo="title"]').forEach(inp => {
+  // Scrivendo si sostituisce la proposta; uscendo dal campo vuoto torna la proposta
+  inp.addEventListener('focus', () => inp.select());
+  inp.addEventListener('blur', () => render());
+});
 
 if (mqDark.addEventListener) mqDark.addEventListener('change', applyTheme);
 else mqDark.addListener(applyTheme);
@@ -5587,6 +5935,83 @@ document.addEventListener('keydown', e => {
 });
 
 // ============================================================
+// ACCESSIBILITÀ: FOCUS, SELEZIONE NELLA CRONOLOGIA, TOAST
+// ============================================================
+const FOCUSABLE = 'a[href], button:not(:disabled), input:not(:disabled):not([type="hidden"]), ' +
+  'select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])';
+function isShown(e) {
+  return !!e.getClientRects().length && !e.closest('[hidden]') && getComputedStyle(e).visibility !== 'hidden';
+}
+function focusables(box) {
+  return Array.from(box.querySelectorAll(FOCUSABLE)).filter(e => e.tabIndex >= 0 && isShown(e));
+}
+// Il contenitore che trattiene il focus: overlay aperto, oppure la finestra Esporta del PC
+function trapBox() {
+  if (state.overlay !== null) return state.overlay === 'regola' && state.layout === 'pc' ? null : overlayElement(state.overlay);
+  if (state.layout === 'pc' && state.view === 'esporta') return $('scr-esporta');
+  return null;
+}
+// Tab e Maiusc+Tab girano dentro la finestra aperta; il "Riprova" del toast resta raggiungibile
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Tab' || e.altKey || e.ctrlKey || e.metaKey) return;
+  const box = trapBox();
+  if (!box) return;
+  const list = focusables(box);
+  const ta = $('toast-action');
+  if (!ta.hidden && $('toast').classList.contains('is-visible')) list.push(ta);
+  e.preventDefault();
+  if (!list.length) return;
+  const i = list.indexOf(document.activeElement);
+  const n = list.length;
+  const j = i < 0 ? (e.shiftKey ? n - 1 : 0) : (i + (e.shiftKey ? -1 : 1) + n) % n;
+  list[j].focus();
+});
+
+// Finestra Esporta del PC: il focus entra all'apertura e torna a chi l'ha aperta alla chiusura
+let exportDialogOpen = false, exportOpener = null;
+function syncDialogFocus() {
+  const open = state.layout === 'pc' && state.view === 'esporta';
+  if (open && !exportDialogOpen) {
+    exportOpener = document.activeElement;
+    const first = focusables($('scr-esporta')).find(b => b.id !== 'esporta-close');
+    if (first) first.focus({ preventScroll: true });
+  } else if (!open && exportDialogOpen) {
+    if (state.layout === 'pc' && exportOpener && exportOpener.isConnected && isShown(exportOpener) && state.overlay === null) exportOpener.focus();
+    exportOpener = null;
+  }
+  exportDialogOpen = open;
+}
+
+// Telefono: entrare in selezione aggiunge una voce di cronologia; uscirne in altro modo (Annulla,
+// Esc, documento creato) la toglie, così l'indietro successivo non ripassa da una voce uguale.
+function syncSelectionEntry() {
+  const h = history.state;
+  if (selection.size && !selDepth && state.layout === 'telefono' && state.view === 'pratica' && state.overlay === null) {
+    state.depth++;
+    selDepth = state.depth;
+    history.pushState(snapshot(), '');
+  } else if (!selection.size && selDepth && h && h.sel && h.depth === selDepth) {
+    selDepth = 0;
+    history.back();
+  }
+}
+
+// Sul telefono il toast sta sopra la barra in basso, che a sua volta sta sopra le aree sicure
+function placeToast() {
+  const t = $('toast');
+  let lift = 0;
+  if (state.layout === 'telefono' && state.overlay === null) {
+    document.querySelectorAll('.bottom-bar, .select-bar').forEach(b => {
+      if (!isShown(b)) return;
+      const r = b.getBoundingClientRect();
+      if (r.height && r.top < window.innerHeight) lift = Math.max(lift, window.innerHeight - r.top);
+    });
+  }
+  const v = lift ? 'calc(' + Math.round(lift) + 'px + var(--sp-3))' : '';
+  if (t.dataset.bottom !== v) { t.dataset.bottom = v; t.style.bottom = v; }
+}
+
+// ============================================================
 // PRATICA: DOCUMENTI, SELEZIONE E RIORDINO
 // ============================================================
 // selection: le foto da assegnare scelte per il prossimo documento (pressione lunga e tocchi sul
@@ -5597,7 +6022,7 @@ let selAnchor = null;          // ultima foto scelta con Ctrl o col tocco: inizi
 const autoMode = new Map();    // docId -> modalità messa dall'app; assente = scelta dall'utente o dal file
 let menuDocId = null;          // documento mostrato nella finestra del documento
 let docTarget = null;          // documento che riceve le foto di "+ Foto" del documento
-let chooser = null;            // scelta del tipo aperta: { proposed: typeId | null, token }
+let chooser = null;            // scelta del tipo aperta: { proposed: typeId | null, token, docId?, pageId? }; senza docId e pageId agisce sulla selezione
 let chooserSeq = 0;
 const TESSERA_PIENA = 'Una tessera ha al massimo 2 foto';
 
@@ -5644,6 +6069,23 @@ function withAutoMode(pr, docId) {
   return { pr: ScanForge.model.setMode(pr, docId, m), changed: true };
 }
 
+// Foto da assegnare = Documento generico implicito: una modalità per tutte, scelta in Correggi.
+// Finché l'utente non sceglie nessuna è attiva e le foto tengono le loro impostazioni.
+// -> modalità comune o null (mai scelta, oppure foto arrivate dopo la scelta)
+function unassignedMode() {
+  const pages = state.practice.unassigned.map(id => state.pages.get(id)).filter(Boolean);
+  if (!pages.length) return null;
+  const m = pages[0].settings.mode;
+  return m && pages.every(p => p.settings.mode === m && p.settings.docType === 'foglio') ? m : null;
+}
+function setUnassignedMode(mode) {
+  state.practice.unassigned.forEach(id => {
+    const p = state.pages.get(id);
+    if (p) p.settings = Object.assign({}, p.settings, { docType: 'foglio', mode });
+  });
+  render();
+}
+
 // Scelta esplicita della modalità del documento (selettore di Correggi): da qui in poi il tipo
 // non la cambia più.
 function setDocMode(docId, mode) {
@@ -5655,7 +6097,12 @@ function setDocMode(docId, mode) {
 }
 
 function createDocumentFromSelection(typeId) {
-  const ids = state.practice.unassigned.filter(id => selection.has(id));
+  const docId = createDocumentFromIds(state.practice.unassigned.filter(id => selection.has(id)), typeId);
+  if (docId) { selection.clear(); selAnchor = null; }
+  return docId;
+}
+
+function createDocumentFromIds(ids, typeId) {
   if (!ids.length) return null;
   let res;
   try {
@@ -5666,8 +6113,7 @@ function createDocumentFromSelection(typeId) {
   }
   const r = withAutoMode(res.practice, res.docId);
   syncDocPages(r.pr, res.docId, null, true);
-  selection.clear();
-  selAnchor = null;
+  ids.forEach(id => selection.delete(id));
   commit(r.pr);
   showToast('Documento creato', 'ok');
   return res.docId;
@@ -5787,15 +6233,35 @@ function renderChips(box, opts) {
 // ---- Crea documento: scelta del tipo ----
 // Il chip proposto è il primo tipo della famiglia che classifyDocument dà per la prima foto
 // scelta; finché la classificazione non arriva nessun chip è proposto.
-function openTypeChooser() {
-  const ids = state.practice.unassigned.filter(id => selection.has(id));
+// Le foto su cui agisce la scelta: quelle selezionate, la sola foto aperta in Correggi o le pagine
+// del documento di cui si cambia il tipo.
+function chooserIds(c) {
+  if (c.docId) { const d = findDoc(c.docId); return d ? d.pageIds : []; }
+  if (c.pageId) return state.practice.unassigned.includes(c.pageId) ? [c.pageId] : [];
+  return state.practice.unassigned.filter(id => selection.has(id));
+}
+
+function openTypeChooser() { startChooser({}); }
+
+// Riga Tipo di Correggi: cambia il tipo del documento, o crea un documento con la sola foto aperta
+// quando è ancora da assegnare.
+function openTypeOfCurrent() {
+  const doc = findDoc(state.docId);
+  if (doc) { startChooser({ docId: doc.id }); return; }
+  if (state.pageId != null) startChooser({ pageId: state.pageId });
+}
+
+function startChooser(target) {
+  const ids = chooserIds(target);
   if (!ids.length) return;
   const token = ++chooserSeq;
-  chooser = { proposed: null, token };
+  chooser = Object.assign({ proposed: null, token }, target);
   openOverlay('tipo');
   // Con più di 2 foto i chip delle tessere sono disabilitati: il focus va al primo attivo
-  const first = $('tp-types').querySelector('.chip:not(:disabled)');
+  // (per un documento esistente, al tipo attuale)
+  const first = $('tp-types').querySelector('.chip.is-selected:not(:disabled)') || $('tp-types').querySelector('.chip:not(:disabled)');
   if (first) first.focus();
+  if (target.docId) return;
   const page = state.pages.get(ids[0]);
   if (!page) return;
   ScanForge.io.loadImage(page.originalSrc, { maxDim: 1200 }).then(img => {
@@ -5804,16 +6270,28 @@ function openTypeChooser() {
   }).then(docType => {
     if (!chooser || chooser.token !== token || state.overlay !== 'tipo') return;
     const fam = docType === 'identita' ? 'tessera' : 'foglio';
-    const n = state.practice.unassigned.filter(id => selection.has(id)).length;
+    const n = chooserIds(chooser).length;
     const t = getTypes().find(x => x.family === fam);
     chooser.proposed = t && !(fam === 'tessera' && n > 2) ? t.id : null;
     renderTipo();
+    // Se il focus è ancora sul primo chip (nessuna scelta da tastiera nel frattempo) passa al proposto
+    const p = chooser.proposed && $('tp-types').querySelector('.chip[data-type="' + CSS.escape(chooser.proposed) + '"]');
+    if (p && !p.disabled && (document.activeElement === first || !$('ov-tipo').contains(document.activeElement))) p.focus();
   }).catch(() => {});
 }
 
 function renderTipo() {
   if (state.overlay !== 'tipo' || !chooser) return;
-  const n = state.practice.unassigned.filter(id => selection.has(id)).length;
+  const n = chooserIds(chooser).length;
+  if (chooser.docId) {
+    const doc = findDoc(chooser.docId);
+    if (!doc) return;
+    const cur = typeOf(doc);
+    setText($('tp-title'), 'Tipo del documento');
+    setText($('tp-hint'), 'Attuale: ' + (cur ? cur.label : 'Documento'));
+    renderChips($('tp-types'), { count: n, proposed: null, current: doc.typeId, pressed: true });
+    return;
+  }
   setText($('tp-title'), 'Crea documento con ' + (n === 1 ? '1 foto' : n + ' foto'));
   const t = chooser.proposed ? getTypes().find(x => x.id === chooser.proposed) : null;
   setText($('tp-hint'), t ? 'Proposto: ' + t.label : 'Scegli il tipo del documento');
@@ -5822,12 +6300,18 @@ function renderTipo() {
 
 $('select-cancel').addEventListener('click', clearSelection);
 $('select-create').addEventListener('click', openTypeChooser);
+$('tools-type').addEventListener('click', openTypeOfCurrent);
 $('tp-types').addEventListener('click', e => {
   const c = e.target.closest('.chip[data-type]');
   if (!c || c.disabled) return;
   const typeId = c.dataset.type;
-  // Prima si chiude la scelta (la sua voce di cronologia), poi si crea il documento
-  closeOverlayThen().then(() => createDocumentFromSelection(typeId));
+  const { docId, pageId } = chooser || {};
+  // Prima si chiude la scelta (la sua voce di cronologia), poi si cambia il tipo o si crea il documento
+  closeOverlayThen().then(() => {
+    if (docId) changeDocType(docId, typeId);
+    else if (pageId) createDocumentFromIds([pageId], typeId);
+    else createDocumentFromSelection(typeId);
+  });
 });
 
 // ---- Finestra del documento ----
@@ -6352,7 +6836,7 @@ function detectCorners(page) {
 // Elaborazione nel core: qui solo caricamento a piena risoluzione e conversione in canvas
 function processPage(page) {
   const io = ScanForge.io;
-  return io.loadImage(page.originalSrc, { maxDim: Infinity }).then(img =>
+  return io.loadImage(page.originalSrc, { maxDim: Infinity, maxPixels: MAX_PIXELS }).then(img =>
     io.imageToCanvas(ScanForge.process(
       img, { corners: page.corners, settings: page.settings }, io.createOps())));
 }
@@ -6367,7 +6851,8 @@ function processPage(page) {
 // preview.gen scarta i risultati vecchi: una piena lenta non copre mai una bozza più nuova.
 const DRAFT_MAX = 1200;
 const FULL_DELAY = 400;
-const FULL_CACHE_MAX = 3;       // piene in memoria: una pagina di 3000 x 2250 occupa 27 MB
+// Piene in memoria: una pagina di 3000 x 2250 occupa 27 MB; sul telefono la memoria è poca
+const fullCacheMax = () => state.layout === 'telefono' ? 1 : 3;
 const fullCache = new Map();    // pageId -> { src, key, canvas }, dalla meno usata di recente
 const fullPending = new Map();  // pageId -> { src, key, promise }: piena in corso, condivisa da chi la chiede
 const draftImages = new Map();  // pageId -> { src, img } decodificata a DRAFT_MAX, per le bozze
@@ -6421,7 +6906,7 @@ function renderPage(pageId, quality) {
       if (cur && cur.originalSrc === snap.originalSrc && renderKey(cur) === key) {
         fullCache.delete(pageId);
         fullCache.set(pageId, { src: snap.originalSrc, key, canvas });
-        while (fullCache.size > FULL_CACHE_MAX) fullCache.delete(fullCache.keys().next().value);
+        while (fullCache.size > fullCacheMax()) fullCache.delete(fullCache.keys().next().value);
       }
       return canvas;
     });
@@ -6538,7 +7023,9 @@ function renderStageTag() {
     text = 'Prima';
   } else if (page) {
     const s = preview.shown;
-    if (busyPages.has(page.id) || !s || s.pageId !== page.id || s.src !== page.originalSrc) { text = 'Elaborazione'; busy = true; }
+    // Anche un cambio di impostazioni in attesa della bozza nuova: il risultato a schermo è vecchio
+    const stale = s && preview.want && s.gen !== preview.gen && preview.failed !== preview.gen;
+    if (busyPages.has(page.id) || !s || s.pageId !== page.id || s.src !== page.originalSrc || stale) { text = 'Elaborazione'; busy = true; }
     else if (s.quality === 'bozza') text = 'Anteprima veloce';
   }
   setText(tag, text);
@@ -6556,12 +7043,17 @@ const REGOLA = [
     { key: 'contrast', label: 'Contrasto', min: -100, max: 100, step: 1 },
     { key: 'brightness', label: 'Luminosità', min: -100, max: 100, step: 1 },
     { key: 'sharpen', label: 'Nitidezza', min: 0, max: 100, step: 1 },
-    { key: 'inchiostro', label: 'Inchiostro', min: 0.1, max: 0.5, step: 0.01, def: 0.25, solo: 'bn' }
+    { key: 'inchiostro', label: 'Inchiostro', min: 0.1, max: 0.5, step: 0.01, def: 0.25, solo: 'bn' },
+    // Interruttori: valgono vero o falso; il valore di fabbrica (def) non si scrive nelle impostazioni
+    { key: 'bilanciaBianco', label: 'Bilanciamento del bianco', tipo: 'switch', def: true,
+      mostra: p => p.settings.mode === 'colori' && p.settings.docType === 'identita' }
   ] },
   { id: 'geometria', title: 'Geometria', items: [
     { key: 'rotFine', label: 'Rotazione fine', min: -45, max: 45, step: 0.5, unit: '°' },
     { key: 'keystoneV', label: 'Keystone verticale', min: -100, max: 100, step: 1 },
-    { key: 'keystoneH', label: 'Keystone orizzontale', min: -100, max: 100, step: 1 }
+    { key: 'keystoneH', label: 'Keystone orizzontale', min: -100, max: 100, step: 1 },
+    { key: 'flipH', label: 'Specchia in orizzontale', tipo: 'switch', def: false },
+    { key: 'flipV', label: 'Specchia in verticale', tipo: 'switch', def: false }
   ] }
 ];
 // Con B/N e Originale contano solo alcuni cursori (sf-look): gli altri restano visibili ma spenti
@@ -6576,6 +7068,7 @@ function regolaDefault(item) {
 }
 function regolaValue(page, item) {
   const v = page.settings[item.key];
+  if (item.tipo === 'switch') return typeof v === 'boolean' ? v : item.def;
   return typeof v === 'number' && Number.isFinite(v) ? v : regolaDefault(item);
 }
 function formatSetting(v, item) {
@@ -6596,6 +7089,13 @@ function formatSetting(v, item) {
     if (g.id === 'immagine') group.appendChild(el('p', { className: 't-caption', id: 'rg-hint', hidden: '' }));
     g.items.forEach(it => {
       const id = 'rg-' + it.key;
+      if (it.tipo === 'switch') {
+        group.appendChild(el('div', { className: 'rg-row rg-switch', 'data-row': it.key }, [
+          el('span', { className: 't-label', id: id + '-l', text: it.label }),
+          el('button', { type: 'button', className: 'switch', role: 'switch', id, 'data-flag': it.key, 'aria-checked': 'false', 'aria-labelledby': id + '-l' })
+        ]));
+        return;
+      }
       group.appendChild(el('div', { className: 'rg-row', 'data-row': it.key }, [
         el('label', { for: id, text: it.label }),
         el('input', { type: 'range', id, 'data-key': it.key, min: String(it.min), max: String(it.max), step: String(it.step) }),
@@ -6617,6 +7117,12 @@ function renderRegola(page) {
       const row = document.querySelector('.rg-row[data-row="' + it.key + '"]');
       const inp = $('rg-' + it.key);
       const v = regolaValue(page, it);
+      if (it.tipo === 'switch') {
+        setHidden(row, !!it.mostra && !it.mostra(page));
+        setAttr(inp, 'aria-checked', String(v));
+        if (v !== it.def && (!it.mostra || it.mostra(page))) changed = true;
+        return;
+      }
       const off = (mode === 'bn' || mode === 'originale') && TONE_KEYS.includes(it.key);
       setHidden(row, !!it.solo && it.solo !== mode);
       row.classList.toggle('is-off', off);
@@ -6640,10 +7146,27 @@ $('regola-body').addEventListener('input', e => {
   renderCorreggi();
 });
 $('regola-body').addEventListener('click', e => {
-  const b = e.target.closest('[data-reset]');
+  const sw = e.target.closest('[data-flag]');
   const page = currentPage();
+  if (sw && page) {
+    const it = REGOLA.flatMap(x => x.items).find(x => x.key === sw.dataset.flag);
+    const s = Object.assign({}, page.settings);
+    const nuovo = !regolaValue(page, it);
+    if (nuovo === it.def) delete s[it.key];
+    else s[it.key] = nuovo;
+    page.settings = s;
+    state.showOriginal = false;
+    renderCorreggi();
+    return;
+  }
+  const b = e.target.closest('[data-reset]');
   if (!b || !page) return;
   const g = REGOLA.find(x => x.id === b.dataset.reset);
+  // Il pulsante si disattiva: prima il focus passa al primo cursore attivo del gruppo
+  if (document.activeElement === b) {
+    const first = Array.from(b.closest('.rg-group').querySelectorAll('input[type=range]')).find(i => !i.disabled && isShown(i));
+    if (first) first.focus();
+  }
   const s = Object.assign({}, page.settings);
   g.items.forEach(it => {
     if (it.def != null) delete s[it.key];
@@ -6657,9 +7180,11 @@ $('regola-body').addEventListener('click', e => {
 // ---- Modalità, prima/dopo, angoli ----
 $('modes').addEventListener('click', e => {
   const b = e.target.closest('[data-mode]');
-  if (!b || !findDoc(state.docId)) return;
+  const page = currentPage();
+  if (!b || !page) return;
   state.showOriginal = false;
-  setDocMode(state.docId, b.dataset.mode);
+  if (findDoc(state.docId)) setDocMode(state.docId, b.dataset.mode);
+  else if (state.practice.unassigned.includes(page.id)) setUnassignedMode(b.dataset.mode);
 });
 
 function toggleCompare() {
@@ -6794,6 +7319,7 @@ function showToast(msg, kind = 'info', action = null) {
   btn.textContent = action ? action.label : '';
   if (action) btn.setAttribute('aria-label', action.label + ': ' + msg); else btn.removeAttribute('aria-label');
   t.classList.toggle('has-action', !!action);
+  placeToast();
   t.classList.add('is-visible');
   armToast(action ? TOAST_ACTION_LIFE : TOAST_LIFE);
 }
@@ -7111,10 +7637,10 @@ async function addImages(items, origin) {
     const n = items.length;
     const scelta = await ask({
       title: n === 1 ? '1 foto in arrivo' : n + ' foto in arrivo',
-      text: 'Con Nuova pratica le foto aperte ora si cancellano.',
+      text: 'Con Nuovo progetto le foto aperte ora si cancellano.',
       buttons: [
-        { id: 'aggiungi', label: 'Aggiungi a questa pratica', kind: 'primary' },
-        { id: 'nuova', label: 'Nuova pratica', kind: 'secondary' }
+        { id: 'aggiungi', label: 'Aggiungi a questo progetto', kind: 'primary' },
+        { id: 'nuova', label: 'Nuovo progetto', kind: 'secondary' }
       ]
     });
     if (!scelta) return added;
@@ -7167,10 +7693,16 @@ async function addImages(items, origin) {
 // un SVG non è una foto.
 const SRC_OK = /^data:(image\/(?!svg)[a-z0-9.+-]+|application\/octet-stream)?(;[a-z0-9=.+-]+)*,/i;
 
-function decodeSize(src) {
+// Immagine di un progetto -> { src, w, h }: rifiutata oltre MAX_PIXELS (un JPEG piccolo può
+// dichiarare 15000 x 15000), ridotta a MAX_DIM come le foto. Gli angoli sono in percentuale e
+// restano validi.
+function decodeProjectImage(src) {
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.addEventListener('load', () => resolve({ w: img.naturalWidth, h: img.naturalHeight }));
+    img.addEventListener('load', () => {
+      if (img.naturalWidth * img.naturalHeight > MAX_PIXELS) { reject(new RangeError('Immagine troppo grande')); return; }
+      resolve(reduceImage(img, src));
+    });
     img.addEventListener('error', () => reject(new TypeError('Immagine non valida')));
     img.src = src;
   });
@@ -7181,7 +7713,7 @@ async function openProjectFile(file, kind) {
   let text;
   if (kind === 'pdf') {
     text = ScanForge.io.projectFromPdf(new Uint8Array(await file.arrayBuffer()));
-    if (text == null) { showToast('Questo PDF non contiene una pratica di ScanForge'); return; }
+    if (text == null) { showToast('Questo PDF non contiene un progetto di ScanForge'); return; }
   } else {
     text = await file.text();
   }
@@ -7199,25 +7731,37 @@ async function openProjectFile(file, kind) {
       corners = ScanForge.io.normalizeCorners(p.corners);
     } catch (e) { bad(); return; }
     let size;
-    try { size = await decodeSize(p.originalSrc); } catch (e) { bad(); return; }
+    try { size = await decodeProjectImage(p.originalSrc); } catch (e) { bad(); return; }
     pages.push({
-      fileId: p.id, originalSrc: p.originalSrc,
+      fileId: p.id, originalSrc: size.src,
       name: typeof p.name === 'string' ? p.name.slice(0, 200) : 'pagina',
       settings: p.settings,
       corners: corners,
       width: size.w, height: size.h
     });
   }
+  // Tipi propri del file: uno locale identico (nome, sigla, famiglia) si riusa, gli altri si
+  // aggiungono con un id nuovo. Poi la regola della tessera con i tipi di questo dispositivo.
+  const typesPlan = planFileTypes(proj.practice.types, proj.practice.documents);
+  const docsTyped = proj.practice.documents.map(d => Object.assign({}, d, { typeId: typesPlan.map.get(d.typeId) || d.typeId }));
+  const tutti = getTypes().concat(typesPlan.added);
+  if (docsTyped.some(d => ScanForge.model.familyOf(d.typeId, tutti) === 'tessera' && d.pageIds.length > 2)) { bad(); return; }
   if (allPageIds().length) {
     const scelta = await ask({
       title: 'Aprire il progetto?',
-      text: 'La pratica aperta sarà chiusa.',
+      text: 'Quello aperto ora sarà chiuso.',
       buttons: [
         { id: 'apri', label: 'Apri', kind: 'primary' },
         { id: 'annulla', label: 'Annulla', kind: 'secondary' }
       ]
     });
     if (scelta !== 'apri') return;
+  }
+  if (typesPlan.added.length) {
+    const t = prefs.get('types');
+    t.propri = t.propri.concat(typesPlan.added);
+    t.next = Math.max(t.next || 1, typesPlan.next);
+    prefs.set('types', t);
   }
   clearPractice();
   // Gli id del file ('p' + posizione) diventano id della sessione
@@ -7231,12 +7775,38 @@ async function openProjectFile(file, kind) {
   });
   const pr = proj.practice;
   commit({
-    cognome: pr.cognome, nome: pr.nome,
-    documents: pr.documents.map(d => ({ id: d.id, typeId: d.typeId, mode: d.mode, pageIds: d.pageIds.map(x => ids.get(x)) })),
+    title: pr.title, cognome: pr.cognome, nome: pr.nome,
+    // Id dei documenti rinumerati: quelli del file possono essere '' o 'un' (la lista Da assegnare)
+    documents: docsTyped.map((d, i) => ({ id: 'd' + (i + 1), typeId: d.typeId, mode: d.mode, pageIds: d.pageIds.map(x => ids.get(x)) })),
     unassigned: pr.unassigned.map(x => ids.get(x))
   });
   showPractice();
   showToast('Progetto aperto', 'ok');
+}
+
+// Tipi propri di un progetto -> { map: id del file -> id locale, added: tipi da aggiungere, next }.
+// Non salva nulla: i tipi nuovi entrano in prefs solo se il progetto si apre davvero.
+// Solo i tipi usati dai documenti del file (sf-io rifiuta già gli altri).
+function planFileTypes(fileTypes, documents) {
+  const t = prefs.get('types');
+  const map = new Map(), added = [];
+  const usati = new Set(documents.map(d => d.typeId));
+  const definiti = new Set((fileTypes || []).map(ft => ft.id));
+  // Gli id del file senza definizione restano com'erano: un tipo nuovo non deve prenderli
+  const nuovoId = ownIdMaker(t, Array.from(usati).filter(id => !definiti.has(id)));
+  const key = x => x.label + '\u0000' + x.sigla + '\u0000' + x.family;
+  const locali = new Map();
+  t.propri.forEach(x => { if (!locali.has(key(x))) locali.set(key(x), x.id); });
+  (fileTypes || []).forEach(ft => {
+    if (!usati.has(ft.id)) return;
+    const same = locali.get(key(ft));
+    if (same) { map.set(ft.id, same); return; }
+    const nt = { id: nuovoId(), label: ft.label, family: ft.family, sigla: ft.sigla };
+    added.push(nt);
+    locali.set(key(nt), nt.id);
+    map.set(ft.id, nt.id);
+  });
+  return { map, added, next: t.next || 1 };
 }
 
 // ---- Domanda con scelte ----
@@ -7270,29 +7840,39 @@ $('dm-actions').addEventListener('click', e => {
 });
 
 // ---- Fotocamera del browser ----
-let camStream = null, camActive = false;
+// camReq numera le richieste: chiudere e riaprire mentre il permesso è in attesa lascia due
+// richieste aperte, e il flusso di quella superata va fermato appena arriva.
+let camStream = null, camActive = false, camReq = 0, camShot = false;
+
+function stopTracks(stream) { stream.getTracks().forEach(t => t.stop()); }
 
 function stopCamera() {
   camActive = false;
-  if (camStream) { camStream.getTracks().forEach(t => t.stop()); camStream = null; }
+  camReq++;
+  if (camStream) { stopTracks(camStream); camStream = null; }
   $('cam-video').srcObject = null;
 }
 
 function openCamera() {
   const md = navigator.mediaDevices;
   if (!md || !md.getUserMedia) { showToast('Fotocamera non disponibile in questo browser', 'error'); return; }
+  if (camStream) { stopTracks(camStream); camStream = null; }
+  const req = ++camReq;
+  const vivo = () => camActive && req === camReq;
   camActive = true;
+  camShot = false;
+  $('cam-scatta').disabled = false;
   openOverlay('fotocamera');
   // Prima la fotocamera posteriore, poi qualsiasi (webcam del PC)
   md.getUserMedia({ video: { facingMode: 'environment' } })
-    .catch(() => md.getUserMedia({ video: true }))
+    .catch(e => vivo() ? md.getUserMedia({ video: true }) : Promise.reject(e))
     .then(stream => {
-      if (!camActive) { stream.getTracks().forEach(t => t.stop()); return; }
+      if (!vivo()) { stopTracks(stream); return; }
       camStream = stream;
       $('cam-video').srcObject = stream;
     })
     .catch(() => {
-      if (!camActive) return;
+      if (!vivo()) return;
       stopCamera();
       closeOverlay();
       showToast('Impossibile usare la fotocamera', 'error');
@@ -7319,7 +7899,11 @@ function closeOverlayThen() {
 
 $('cam-scatta').addEventListener('click', () => {
   const video = $('cam-video');
+  if (camShot) return;
   if (!camStream || !video.videoWidth) { showToast('Fotocamera non ancora pronta'); return; }
+  // Un solo scatto per apertura: il doppio clic darebbe due foto
+  camShot = true;
+  $('cam-scatta').disabled = true;
   const c = document.createElement('canvas');
   c.width = video.videoWidth;
   c.height = video.videoHeight;
@@ -7345,7 +7929,7 @@ function syncIngressi() {
   if (camActive && state.overlay !== 'fotocamera') stopCamera();
   // Voci ritrovate andando avanti: scelta del tipo senza foto selezionate, documento non più esistente
   if ((state.overlay === 'domanda' && !askResolve) || (state.overlay === 'fotocamera' && !camActive) ||
-      (state.overlay === 'tipo' && !selection.size) || (state.overlay === 'documento' && !findDoc(menuDocId))) {
+      (state.overlay === 'tipo' && !chooserIds(chooser || {}).length) || (state.overlay === 'documento' && !findDoc(menuDocId))) {
     state.overlay = null;
     history.replaceState(snapshot(), '');
     renderOverlays();
@@ -7481,6 +8065,7 @@ function groupKey(split, g) {
 function defaultNames(groups, split) {
   return ScanForge.model.fileNames(groups, {
     schema: prefs.get(split ? 'schemaSeparati' : 'schemaUnico'),
+    progetto: ScanForge.model.projectTitle(state.practice, getTypes()),
     cognome: state.practice.cognome, nome: state.practice.nome,
     date: new Date(), types: getTypes(), practice: state.practice
   });
@@ -7516,15 +8101,30 @@ function exportWarnings() {
   return { unassigned: n, check };
 }
 
-function projectBytes() {
-  const pages = allPageIds().map(id => state.pages.get(id));
-  const json = ScanForge.io.serializeProject({ projectName: '', a4Compose: false, pages, practice: state.practice });
+// Progetto da allegare. Con group (PDF separati) solo la parte di quel PDF: le sue pagine, i
+// suoi documenti e i loro tipi; chi manda il contratto non manda anche la carta d'identità.
+function projectBytes(group) {
+  const pr = state.practice;
+  let ids = allPageIds(), practice = pr;
+  if (group) {
+    const dentro = new Set(group.items.map(it => it.pageId));
+    ids = ids.filter(id => dentro.has(id));
+    practice = {
+      title: pr.title, cognome: pr.cognome, nome: pr.nome,
+      documents: pr.documents.filter(d => group.docIds.includes(d.id)),
+      unassigned: pr.unassigned.filter(id => dentro.has(id))
+    };
+  }
+  const pages = ids.map(id => state.pages.get(id));
+  const json = ScanForge.io.serializeProject({ projectName: '', a4Compose: false, pages, practice, types: getTypes() });
   return new TextEncoder().encode(json);
 }
 
 const pause = () => new Promise(r => setTimeout(r, 0));
 
-// Fogli di un gruppo in ordine: le tessere consecutive si compongono insieme (due per foglio A4)
+// Fogli di un gruppo in ordine: le tessere consecutive si compongono insieme (due per foglio A4).
+// La serie si chiude ogni due tessere, quando arriva la terza: i fogli sono gli stessi e in
+// memoria restano al più quattro pagine piene.
 async function groupImages(group, onPage) {
   const io = ScanForge.io;
   const images = [];
@@ -7545,6 +8145,8 @@ async function groupImages(group, onPage) {
     await pause(); // lascia disegnare l'avanzamento
     const canvas = await renderPage(it.pageId, 'piena');
     if (it.a4) {
+      const gruppi = new Set(run.map(r => r.page.docGroup));
+      if (gruppi.size >= 2 && !gruppi.has(it.docGroup)) await flush();
       run.push({ page: { docGroup: it.docGroup, docSide: it.docSide }, canvas });
     } else {
       await flush();
@@ -7556,23 +8158,23 @@ async function groupImages(group, onPage) {
 }
 
 // exportPractice({ split, names, editable, onProgress }) -> Promise<File[]>, un PDF per gruppo.
-// names: nomi senza estensione, uno per gruppo (predefiniti dagli schemi). Con editable ogni
-// PDF porta l'intera pratica: uno qualsiasi riapre tutto.
+// names: nomi senza estensione, uno per gruppo (predefiniti dagli schemi). Con editable il PDF
+// unico porta l'intera pratica, ogni PDF separato solo la parte del suo documento.
 async function exportPractice(opts = {}) {
   const split = opts.split != null ? !!opts.split : prefs.get('split');
   const groups = exportGroups(split);
   if (!groups.length) throw new TypeError('Nessuna pagina da esportare');
   const names = opts.names || finalNames(groups, split, null);
   if (names.length !== groups.length) throw new TypeError('Un nome per ogni PDF');
-  const pdfOpts = opts.editable
-    ? { attachment: { name: ScanForge.model.ATTACHMENT_NAME, bytes: projectBytes() } } : undefined;
+  const pdfOpts = g => opts.editable
+    ? { attachment: { name: ScanForge.model.ATTACHMENT_NAME, bytes: projectBytes(split ? g : null) } } : undefined;
   const total = groups.reduce((n, g) => n + g.items.length, 0);
   let done = 0;
   const onPage = () => { done++; if (opts.onProgress) opts.onProgress(done, total); };
   const files = [];
   for (let i = 0; i < groups.length; i++) {
     const images = await groupImages(groups[i], onPage);
-    files.push(new File([ScanForge.io.buildPdf(images, pdfOpts)], names[i] + '.pdf', { type: 'application/pdf' }));
+    files.push(new File([ScanForge.io.buildPdf(images, pdfOpts(groups[i]))], names[i] + '.pdf', { type: 'application/pdf' }));
   }
   return files;
 }
@@ -7739,6 +8341,11 @@ function printPdf(file) {
       clearTimeout(attesa);
       try {
         const w = frame.contentWindow;
+        // Il riquadro si toglie a stampa finita; il timer di PRINT_LIFE resta come rete di
+        // sicurezza per i visualizzatori PDF che non mandano afterprint
+        w.addEventListener('afterprint', () => setTimeout(() => {
+          if (printFrame && printFrame.frame === frame) cleanupPrint();
+        }, 0));
         w.focus();
         w.print();
         fatto = true;
@@ -7769,10 +8376,10 @@ function printPractice() {
 async function newPractice() {
   if (state.busy) return false;
   const scelta = await ask({
-    title: 'Iniziare una nuova pratica?',
+    title: 'Iniziare un nuovo progetto?',
     text: 'Foto e documenti saranno cancellati.',
     buttons: [
-      { id: 'nuova', label: 'Nuova pratica', kind: 'danger' },
+      { id: 'nuova', label: 'Nuovo progetto', kind: 'danger' },
       { id: 'annulla', label: 'Annulla', kind: 'secondary' }
     ]
   });
@@ -7959,10 +8566,216 @@ $('exp-names').addEventListener('keydown', e => {
 });
 
 // ============================================================
+// IMPOSTAZIONI
+// ============================================================
+// Tutto passa da prefs. Schemi e sigle si salvano a ogni tasto, ma il campo si riscrive solo
+// quando il focus esce: chi scrive non vede il testo cambiare sotto le dita.
+const SIGLA_MAX = 20, LABEL_MAX = 40;
+const FAMILY_LABEL = { tessera: 'Tessera', foglio: 'Foglio' };
+let newFamily = 'foglio';
+
+// Una sigla finisce nei nomi dei file: stesse regole dei nomi, al più 20 caratteri
+function cleanSigla(v) {
+  return ScanForge.model.cleanFileName(String(v).trim()).slice(0, SIGLA_MAX).replace(/[ .]+$/, '');
+}
+
+// Esempio fisso dell'anteprima: Rossi Mario con una CIE (e un contratto per i PDF separati)
+function schemaPreview(key) {
+  const types = getTypes();
+  const practice = {
+    cognome: 'Rossi', nome: 'Mario', unassigned: [],
+    documents: [{ id: 'd1', typeId: 'cie', mode: null, pageIds: [] }, { id: 'd2', typeId: 'contratto', mode: null, pageIds: [] }]
+  };
+  const groups = key === 'schemaUnico'
+    ? [{ docIds: ['d1'], items: [] }]
+    : [{ docIds: ['d1'], items: [] }, { docIds: ['d2'], items: [] }];
+  return ScanForge.model.fileNames(groups, {
+    schema: prefs.get(key), progetto: 'Contratto', cognome: 'Rossi', nome: 'Mario', date: new Date(), types, practice
+  }).map(n => n + '.pdf').join(', ');
+}
+
+// Id dei tipi propri nuovi: dal contatore, mai riusati (anche dopo un'eliminazione), così un
+// progetto vecchio non si lega a un tipo diverso. Sono esclusi anche gli id usati dai documenti
+// (della pratica aperta ed extra, per esempio quelli di un file senza definizione). Restituisce
+// un generatore lineare; t.next si aggiorna a ogni id dato, chi chiama salva t.
+function ownIdMaker(t, extra) {
+  let n = Number.isInteger(t.next) && t.next >= 1 ? t.next : 1;
+  const used = new Set(ScanForge.model.TYPES.map(x => x.id));
+  t.propri.forEach(x => {
+    used.add(x.id);
+    const m = /^proprio(\d+)$/.exec(x.id);
+    if (m) n = Math.max(n, Number(m[1]) + 1);
+  });
+  state.practice.documents.forEach(d => used.add(d.typeId));
+  (extra || []).forEach(id => used.add(id));
+  return () => {
+    while (used.has('proprio' + n)) n++;
+    const id = 'proprio' + n;
+    used.add(id);
+    t.next = ++n;
+    return id;
+  };
+}
+function takeOwnId(t) { return ownIdMaker(t)(); }
+
+function typeInUse(typeId) {
+  return state.practice.documents.some(d => d.typeId === typeId);
+}
+
+function setSigla(typeId, sigla) {
+  const t = prefs.get('types');
+  const own = t.propri.find(x => x.id === typeId);
+  if (own) own.sigla = sigla;
+  else {
+    const base = ScanForge.model.TYPES.find(x => x.id === typeId);
+    if (!base) return;
+    if (sigla === base.sigla) delete t.sigle[typeId]; else t.sigle[typeId] = sigla;
+  }
+  prefs.set('types', t);
+}
+
+function addOwnType() {
+  const label = $('pref-new-label').value.trim().slice(0, LABEL_MAX);
+  const sigla = cleanSigla($('pref-new-sigla').value);
+  const err = $('pref-new-error');
+  const types = getTypes();
+  let msg = '';
+  if (!label) msg = 'Scrivi il nome del tipo';
+  else if (!sigla) msg = 'Scrivi la sigla';
+  else if (types.some(x => x.label.toLowerCase() === label.toLowerCase())) msg = 'Esiste già un tipo con questo nome';
+  setText(err, msg);
+  if (msg) { (label ? $('pref-new-sigla') : $('pref-new-label')).focus(); return false; }
+  const t = prefs.get('types');
+  t.propri.push({ id: takeOwnId(t), label, family: newFamily, sigla });
+  prefs.set('types', t);
+  $('pref-new-label').value = '';
+  $('pref-new-sigla').value = '';
+  render();
+  showToast('Tipo aggiunto', 'ok');
+  $('pref-new-label').focus();
+  return true;
+}
+
+function deleteOwnType(typeId) {
+  if (typeInUse(typeId)) { showToast('Tipo usato da un documento del progetto', 'error'); return false; }
+  const t = prefs.get('types');
+  t.propri = t.propri.filter(x => x.id !== typeId);
+  prefs.set('types', t);
+  render();
+  // Il pulsante tolto aveva il focus: passa al campo dell'ultimo tipo rimasto
+  const last = $('pref-types').querySelector('.type-row:last-child input');
+  if (last && (!document.activeElement || document.activeElement === document.body)) last.focus();
+  return true;
+}
+
+function renderImpostazioni() {
+  if (state.overlay !== 'impostazioni') return;
+  ['schemaUnico', 'schemaSeparati'].forEach(key => {
+    const inp = document.querySelector('input[data-schema="' + key + '"]');
+    if (document.activeElement !== inp && inp.value !== prefs.get(key)) inp.value = prefs.get(key);
+    setText($(key === 'schemaUnico' ? 'pref-prev-unico' : 'pref-prev-separati'), 'Esempio: ' + schemaPreview(key));
+  });
+  const S = ScanForge.model.SCHEMAS;
+  $('pref-schema-reset').disabled = prefs.get('schemaUnico') === S.unico && prefs.get('schemaSeparati') === S.separati;
+  $('pref-salva').disabled = !allPageIds().length || state.busy;
+  setAttr($('pref-editable'), 'aria-checked', String(prefs.get('editablePdf')));
+  $('pref-new-family').querySelectorAll('button').forEach(b => setAttr(b, 'aria-pressed', String(b.dataset.family === newFamily)));
+
+  const own = new Set(prefs.get('types').propri.map(x => x.id));
+  const types = getTypes();
+  keepFocus(() => syncChildren($('pref-types'), types.map(t => t.id), id => el('div', { className: 'type-row', role: 'listitem' }, [
+    el('span', { className: 'type-row-name' }, [el('span', { className: 't-label' }), el('span', { className: 't-caption' })]),
+    el('input', { type: 'text', autocomplete: 'off', spellcheck: 'false', maxlength: String(SIGLA_MAX), 'data-sigla': id }),
+    own.has(id)
+      ? el('button', { type: 'button', className: 'btn-icon danger', 'data-del': id }, [svgIcon('elimina')])
+      : el('span', { 'aria-hidden': 'true' })
+  ]), (row, id) => {
+    const t = types.find(x => x.id === id);
+    setText(row.querySelector('.t-label'), t.label);
+    setText(row.querySelector('.t-caption'), FAMILY_LABEL[t.family] + (own.has(id) ? ', tipo aggiunto' : ''));
+    const inp = row.querySelector('input');
+    setAttr(inp, 'aria-label', 'Sigla di ' + t.label);
+    if (document.activeElement !== inp && inp.value !== t.sigla) { inp.value = t.sigla; setAttr(inp, 'aria-invalid', null); }
+    const del = row.querySelector('[data-del]');
+    if (del) setAttr(del, 'aria-label', 'Elimina il tipo ' + t.label);
+  }));
+}
+
+$('ov-impostazioni').addEventListener('input', e => {
+  const t = e.target;
+  if (t.dataset.schema) {
+    prefs.set(t.dataset.schema, t.value.slice(0, 200));
+    renderImpostazioni();
+  } else if (t.dataset.sigla) {
+    const s = cleanSigla(t.value);
+    setAttr(t, 'aria-invalid', s ? null : 'true');
+    setText($('pref-types-error'), s ? '' : 'La sigla non può essere vuota');
+    if (s) { setSigla(t.dataset.sigla, s); renderImpostazioni(); }
+  }
+});
+// All'uscita il campo mostra il valore salvato (una sigla vuota torna quella di prima)
+$('ov-impostazioni').addEventListener('focusout', e => {
+  if (!e.target.dataset || !(e.target.dataset.schema || e.target.dataset.sigla)) return;
+  setText($('pref-types-error'), '');
+  setTimeout(renderImpostazioni, 0);
+});
+$('ov-impostazioni').addEventListener('click', e => {
+  const del = e.target.closest('[data-del]');
+  if (del) { deleteOwnType(del.dataset.del); return; }
+  const fam = e.target.closest('[data-family]');
+  if (fam) { newFamily = fam.dataset.family; renderImpostazioni(); }
+});
+$('pref-new-add').addEventListener('click', addOwnType);
+['pref-new-label', 'pref-new-sigla'].forEach(id => $(id).addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); addOwnType(); }
+}));
+$('pref-schema-reset').addEventListener('click', () => {
+  const S = ScanForge.model.SCHEMAS;
+  prefs.set('schemaUnico', S.unico);
+  prefs.set('schemaSeparati', S.separati);
+  // Il pulsante si disattiva: il focus passa al primo schema
+  $('pref-schema-unico').focus();
+  render();
+});
+$('pref-editable').addEventListener('click', () => {
+  prefs.set('editablePdf', !prefs.get('editablePdf'));
+  render();
+});
+
+// Salva progetto: il JSON della pratica, chiamato come il PDF unico
+async function saveProject() {
+  if (state.busy) { showToast('Attendi la fine dell\'esportazione'); return false; }
+  if (!allPageIds().length) return false;
+  try {
+    await whenPagesReady();
+    const name = defaultNames(exportGroups(false), false)[0] + '.json';
+    downloadBlob(new Blob([projectBytes()], { type: 'application/json' }), name);
+    showToast('Progetto salvato', 'ok');
+    return true;
+  } catch (e) {
+    console.error(e);
+    showToast('Salvataggio non riuscito', 'error', { label: 'Riprova', run: saveProject });
+    return false;
+  }
+}
+$('pref-salva').addEventListener('click', () => closeOverlayThen().then(saveProject));
+
+// ============================================================
 // AVVIO
 // ============================================================
 applyTheme();
+// Finestra Informazioni: versione, collegamenti e API. Gli indirizzi stanno in un solo punto.
+const INFO_LINKS = Object.freeze({
+  sito: 'https://denvermotel.github.io/scanforge/',
+  github: 'https://github.com/denvermotel/scanforge'
+});
 $('app-version').textContent = 'ScanForge ' + ScanForge.version;
+$('info-api').textContent = 'API versione ' + ScanForge.apiVersion;
+[['info-sito', INFO_LINKS.sito], ['info-github', INFO_LINKS.github]].forEach(([id, url]) => {
+  const a = $(id);
+  a.href = url;
+  a.textContent = url.replace(/^https:\/\//, '');
+});
 (function initHistory() {
   const h = history.state;
   if (h && h.sf === HISTORY_KEY && !h.base) {
