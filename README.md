@@ -23,7 +23,8 @@ leaves your computer.
 - Scriptable API: `ScanForge.convert(input, options)` returns a PDF, JPEG, PNG or project
   file plus a per-page report (types in `dist/scanforge.d.ts`).
 
-**Usage:** download `index.html` and open it in a recent browser.
+**Usage:** download `index.html` and open it in a recent browser, or use the online version at
+https://denvermotel.github.io/scanforge/ from a desktop or mobile browser.
 
 **Status:** 0.3.1 beta.
 
@@ -51,7 +52,8 @@ browser: i file non escono mai dal computer.
 - API programmabile: `ScanForge.convert(input, opzioni)` restituisce un PDF, JPEG, PNG o
   progetto e un report per pagina (tipi in `dist/scanforge.d.ts`).
 
-**Uso:** scaricare `index.html` e aprirlo in un browser recente.
+**Uso:** scaricare `index.html` e aprirlo in un browser recente, oppure usare la versione online su
+https://denvermotel.github.io/scanforge/ da un browser desktop o mobile.
 
 **Stato:** 0.3.1 beta.
 
