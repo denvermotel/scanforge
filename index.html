@@ -8796,6 +8796,35 @@ takeSharedFiles().then(files => {
   $('app').classList.add('is-arriving');
   return handleFiles(files, 'condividi').finally(() => $('app').classList.remove('is-arriving'));
 }).catch(() => {});
+
+// PWA: solo in contesto sicuro (HTTPS o localhost), come pagina principale e fuori da Electron. Da file:// o in un iframe
+// l'app resta il file singolo di sempre, senza service worker.
+(function initPwa() {
+  if (embedded || !window.isSecureContext || !/^https?:$/.test(location.protocol) || !('serviceWorker' in navigator)) return;
+  if (typeof process !== 'undefined' && process.versions && process.versions.electron) return;
+  [['manifest', 'manifest.webmanifest'], ['apple-touch-icon', 'icons/apple-touch-icon.png']].forEach(([rel, href]) => {
+    const l = document.createElement('link');
+    l.rel = rel; l.href = href;
+    document.head.appendChild(l);
+  });
+  const offerUpdate = reg => showToast('Nuova versione disponibile', 'info', {
+    label: 'Aggiorna',
+    run: () => {
+      navigator.serviceWorker.addEventListener('controllerchange', () => location.reload(), { once: true });
+      reg.waiting.postMessage({ type: 'skipWaiting' });
+    }
+  });
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    if (reg.waiting && navigator.serviceWorker.controller) offerUpdate(reg);
+    reg.addEventListener('updatefound', () => {
+      const w = reg.installing;
+      if (!w) return;
+      w.addEventListener('statechange', () => {
+        if (w.state === 'installed' && navigator.serviceWorker.controller) offerUpdate(reg);
+      });
+    });
+  }).catch(() => { /* il funzionamento offline è facoltativo */ });
+})();
 </script>
 </body>
 </html>
